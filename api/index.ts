@@ -330,82 +330,86 @@ app.use("/api/beu-proxy", async (req, res) => {
 // Sitemap.xml Feed
 app.get("/sitemap.xml", (req, res) => {
   res.header("Content-Type", "application/xml");
+  const host = req.headers.host || "nexusbeu.vercel.app";
+  const protocol = (req.headers["x-forwarded-proto"] as string) || "https";
+  const baseUrl = `${protocol}://${host}`;
+
   const sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://nexusbeu.org/</loc>
+    <loc>${baseUrl}/</loc>
     <lastmod>2026-07-05</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://nexusbeu.org/syllabus</loc>
+    <loc>${baseUrl}/syllabus</loc>
     <lastmod>2026-07-05</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://nexusbeu.org/notes</loc>
+    <loc>${baseUrl}/notes</loc>
     <lastmod>2026-07-05</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://nexusbeu.org/pyqs</loc>
+    <loc>${baseUrl}/pyqs</loc>
     <lastmod>2026-07-05</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://nexusbeu.org/lectures</loc>
+    <loc>${baseUrl}/lectures</loc>
     <lastmod>2026-07-05</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://nexusbeu.org/results</loc>
+    <loc>${baseUrl}/results</loc>
     <lastmod>2026-07-05</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://nexusbeu.org/notices</loc>
+    <loc>${baseUrl}/notices</loc>
     <lastmod>2026-07-05</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://nexusbeu.org/sgpa</loc>
+    <loc>${baseUrl}/sgpa</loc>
     <lastmod>2026-07-05</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://nexusbeu.org/routine</loc>
+    <loc>${baseUrl}/routine</loc>
     <lastmod>2026-07-05</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://nexusbeu.org/about</loc>
+    <loc>${baseUrl}/about</loc>
     <lastmod>2026-07-05</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://nexusbeu.org/privacy</loc>
+    <loc>${baseUrl}/privacy</loc>
     <lastmod>2026-07-05</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://nexusbeu.org/contact</loc>
+    <loc>${baseUrl}/contact</loc>
     <lastmod>2026-07-05</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://nexusbeu.org/sitemap</loc>
+    <loc>${baseUrl}/sitemap</loc>
     <lastmod>2026-07-05</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
