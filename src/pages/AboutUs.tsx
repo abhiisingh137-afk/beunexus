@@ -1,7 +1,7 @@
 import React from "react";
 import { GraduationCap, Award, BookOpen, ShieldCheck, Heart, Sparkles, Users, Code, Github, Linkedin, Mail, Terminal, Cpu } from "lucide-react";
 
-const abhinavAvatar = "/abhinav_avatar_1783240955691.jpg";
+const abhinavAvatar = "/abhinav_avatar.jpg";
 
 export default function AboutUs() {
   const milestones = [
