@@ -15,7 +15,7 @@ export default function Footer({ setPage }: FooterProps) {
             <div className="flex items-center gap-3 text-white font-bold text-xl mb-4">
               <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center bg-white border border-slate-800 shadow-sm shrink-0">
                 <img
-                  src="/website_logo.png"
+                  src="https://i.ibb.co/SwwsnFM2/logo2.png"
                   alt="nexusBEU Logo"
                   className="w-full h-full object-contain p-0.5"
                   referrerPolicy="no-referrer"

@@ -42,7 +42,7 @@ export default function Navbar({ currentPage, setPage, isAdmin, onLogout, darkMo
             >
               <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center bg-white dark:bg-slate-950 border border-slate-150 dark:border-slate-800 shadow-sm shrink-0">
                 <img
-                  src="/website_logo.png"
+                  src="https://i.ibb.co/SwwsnFM2/logo2.png"
                   alt="nexusBEU Logo"
                   className="w-full h-full object-contain p-0.5"
                   referrerPolicy="no-referrer"
