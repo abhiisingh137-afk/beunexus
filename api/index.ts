@@ -415,7 +415,7 @@ app.get("/sitemap.xml", (req, res) => {
     <priority>0.5</priority>
   </url>
 </urlset>`;
-  res.send(sitemapXml);
+  res.send(sitemapXml.trim());
 });
 
 export default app;

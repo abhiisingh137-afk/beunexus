@@ -438,7 +438,7 @@ async function startServer() {
     <priority>0.5</priority>
   </url>
 </urlset>`;
-    res.send(sitemapXml);
+    res.send(sitemapXml.trim());
   });
 
   // Vite middleware for development
