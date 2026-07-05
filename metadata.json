@@ -1,0 +1,8 @@
+{
+  "name": "nexusBEU",
+  "description": "A comprehensive, premium portal for Bihar Engineering University (BEU) students to access syllabi, notes, PYQs, lectures, results, calculate SGPA, and create routines. Includes a protected administrator panel.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

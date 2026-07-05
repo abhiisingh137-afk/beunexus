@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Shared validation function to check admin secret
+    function isAdminWrite(data) {
+      return data != null && data.secretCode == 'apnaBEU@admin2026';
+    }
+
+    match /syllabi/{id} {
+      allow read: if true;
+      allow create, update: if isAdminWrite(request.resource.data);
+      allow delete: if isAdminWrite(resource.data);
+    }
+
+    match /notes/{id} {
+      allow read: if true;
+      allow create, update: if isAdminWrite(request.resource.data);
+      allow delete: if isAdminWrite(resource.data);
+    }
+
+    match /pyqs/{id} {
+      allow read: if true;
+      allow create, update: if isAdminWrite(request.resource.data);
+      allow delete: if isAdminWrite(resource.data);
+    }
+
+    match /lectures/{id} {
+      allow read: if true;
+      allow create, update: if isAdminWrite(request.resource.data);
+      allow delete: if isAdminWrite(resource.data);
+    }
+
+    match /notices/{id} {
+      allow read: if true;
+      allow create, update: if isAdminWrite(request.resource.data);
+      allow delete: if isAdminWrite(resource.data);
+    }
+
+    match /contacts/{id} {
+      allow create: if true;
+      allow read, update, delete: if false;
+    }
+  }
+}

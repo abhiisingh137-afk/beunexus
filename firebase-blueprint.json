@@ -1,0 +1,114 @@
+{
+  "entities": {
+    "syllabus": {
+      "title": "Syllabus",
+      "description": "Branch and semester syllabus",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "branch": { "type": "string" },
+        "semester": { "type": "integer" },
+        "subject": { "type": "string" },
+        "description": { "type": "string" },
+        "modules": { "type": "string" },
+        "pdfUrl": { "type": "string" },
+        "secretCode": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["branch", "semester", "subject", "modules", "secretCode"]
+    },
+    "note": {
+      "title": "Note",
+      "description": "Study notes uploaded for a subject",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "branch": { "type": "string" },
+        "semester": { "type": "integer" },
+        "subject": { "type": "string" },
+        "chapter": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "uploader": { "type": "string" },
+        "secretCode": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["branch", "semester", "subject", "chapter", "title", "fileUrl", "secretCode"]
+    },
+    "pyq": {
+      "title": "PYQ",
+      "description": "Previous Year Questions for exams",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "branch": { "type": "string" },
+        "semester": { "type": "integer" },
+        "subject": { "type": "string" },
+        "year": { "type": "integer" },
+        "examType": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "secretCode": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["branch", "semester", "subject", "year", "examType", "fileUrl", "secretCode"]
+    },
+    "lecture": {
+      "title": "Lecture",
+      "description": "Branch-wise lecture chapters and links",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "branch": { "type": "string" },
+        "semester": { "type": "integer" },
+        "subject": { "type": "string" },
+        "chapter": { "type": "string" },
+        "title": { "type": "string" },
+        "videoId": { "type": "string" },
+        "order": { "type": "integer" },
+        "description": { "type": "string" },
+        "secretCode": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["branch", "semester", "subject", "chapter", "title", "videoId", "secretCode"]
+    },
+    "notice": {
+      "title": "Notice",
+      "description": "Official or admin-posted notices",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "date": { "type": "string" },
+        "link": { "type": "string" },
+        "category": { "type": "string" },
+        "secretCode": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "content", "date"]
+    }
+  },
+  "firestore": {
+    "syllabi": {
+      "schema": "syllabus",
+      "description": "Syllabus documents filterable by branch and semester"
+    },
+    "notes": {
+      "schema": "note",
+      "description": "Notes documents filterable by branch, semester and subject"
+    },
+    "pyqs": {
+      "schema": "pyq",
+      "description": "Previous Year Questions documents filterable by branch, semester and subject"
+    },
+    "lectures": {
+      "schema": "lecture",
+      "description": "Video lectures structured under branch -> semester -> subject -> chapter"
+    },
+    "notices": {
+      "schema": "notice",
+      "description": "Local or override notices for the BEU notice page"
+    }
+  }
+}
