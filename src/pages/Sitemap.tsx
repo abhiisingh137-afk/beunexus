@@ -10,6 +10,7 @@ export default function Sitemap({ setPage }: { setPage: (page: string) => void }
         { name: "Syllabus Directory", id: "syllabus", desc: "Detailed department syllabus modules" },
         { name: "Notes Repository", id: "notes", desc: "Subject notes compiled and vetted by toppers" },
         { name: "PYQs Catalog", id: "pyqs", desc: "Semester previous year question papers" },
+        { name: "GATE Preparation Hub", id: "gate", desc: "Interactive GATE syllabus branches and solved papers from 2018-2025" },
         { name: "Video Lectures", id: "lectures", desc: "Curated YouTube playlists mapped to BEU courses" }
       ]
     },

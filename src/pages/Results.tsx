@@ -1,17 +1,101 @@
-import React, { useState } from "react";
-import { ExternalLink, ShieldAlert, RefreshCw, Globe, Monitor, Smartphone, Trophy, Sparkles } from "lucide-react";
+import React, { useState, useRef, useEffect } from "react";
+import { 
+  ExternalLink, 
+  ShieldAlert, 
+  RefreshCw, 
+  Globe, 
+  Monitor, 
+  Smartphone, 
+  Trophy, 
+  Sparkles,
+  Minus,
+  Plus,
+  RotateCcw,
+  Maximize2,
+  Minimize2,
+  Lock
+} from "lucide-react";
 
 export default function Results() {
   const [iframeKey, setIframeKey] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<"desktop" | "mobile">("desktop");
   const [useBackupMode, setUseBackupMode] = useState(false);
+  
+  // Custom interactive viewport features (from the user request)
+  const [zoomLevel, setZoomLevel] = useState(1.0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerHeight, setContainerHeight] = useState(700);
 
+  const baseOffset = 185; // Positive integer value to offset/crop the university's header
   const resultsUrl = "https://beu-bih.ac.in/result-one";
 
   const reloadIframe = () => {
     setIsLoading(true);
     setIframeKey((prev) => prev + 1);
+  };
+
+  // Track the container client height dynamically to ensure precise inverse scale calculation
+  useEffect(() => {
+    const updateHeight = () => {
+      if (containerRef.current) {
+        setContainerHeight(containerRef.current.clientHeight);
+      }
+    };
+
+    updateHeight();
+    
+    // Set up a ResizeObserver to listen for container element resize events
+    const observer = new ResizeObserver(updateHeight);
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    window.addEventListener("resize", updateHeight);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateHeight);
+    };
+  }, [viewMode, isFullscreen, useBackupMode]);
+
+  // Adjust zoom level bounded between 0.5 and 1.5
+  const adjustZoom = (amount: number) => {
+    setZoomLevel((prev) => {
+      const next = parseFloat((prev + amount).toFixed(1));
+      if (next >= 0.5 && next <= 1.5) {
+        return next;
+      }
+      return prev;
+    });
+  };
+
+  const resetZoom = () => {
+    setZoomLevel(1.0);
+  };
+
+  const toggleFullscreen = () => {
+    setIsFullscreen((prev) => !prev);
+  };
+
+  // Math Fix calculations based on scaling matrix
+  const activeOffset = isFullscreen ? 0 : baseOffset;
+  const calculatedWidth = 100 / zoomLevel;
+  const calculatedHeight = containerHeight > 0
+    ? ((containerHeight + activeOffset) / containerHeight) * (100 / zoomLevel)
+    : 100 / zoomLevel;
+
+  const iframeStyle: React.CSSProperties = {
+    width: `${calculatedWidth}%`,
+    height: `${calculatedHeight}%`,
+    transform: `scale(${zoomLevel}) translateY(${-activeOffset / zoomLevel}px)`,
+    transformOrigin: "top left",
+    position: "absolute",
+    top: 0,
+    left: 0,
+    border: "0",
+    backgroundColor: "white",
   };
 
   const recentResults = [
@@ -131,75 +215,147 @@ export default function Results() {
           </div>
         </div>
       ) : (
-        /* Iframe Browser/Device Shell */
-        <div className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-3xl shadow-lg overflow-hidden transition-all duration-300">
-          {/* Browser Top Bar / Emulator Controls */}
-          <div className="px-6 py-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-            {/* Address Bar Emulator */}
-            <div className="flex items-center gap-2 w-full sm:max-w-md bg-white dark:bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800">
-              <Globe className="w-4 h-4 text-slate-400 shrink-0" />
+        /* Immersive Custom Browser Shell with Zoom Matrix Translation */
+        <div 
+          className={`bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden transition-all duration-300 ${
+            isFullscreen 
+              ? "fixed inset-0 z-50 rounded-none border-0 flex flex-col h-screen w-screen bg-slate-900" 
+              : "rounded-3xl"
+          }`}
+        >
+          {/* Simulated Browser Bar with Dot Indicators & Zoom Controls */}
+          <div className="px-6 py-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4 shrink-0">
+            
+            {/* Left Column: Window indicators + Zoom level */}
+            <div className="flex items-center justify-between w-full md:w-auto gap-4">
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-rose-500"></div>
+                <div className="w-3 h-3 rounded-full bg-amber-500"></div>
+                <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+              </div>
+              
+              {/* Zoom Controls Panel */}
+              <div className="flex items-center gap-1 bg-white dark:bg-slate-950 px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+                <button
+                  onClick={() => adjustZoom(-0.1)}
+                  disabled={zoomLevel <= 0.5}
+                  className="p-1 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition disabled:opacity-30 cursor-pointer"
+                  title="Zoom Out"
+                >
+                  <Minus className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 min-w-[42px] text-center font-mono select-none">
+                  {Math.round(zoomLevel * 100)}%
+                </span>
+                <button
+                  onClick={() => adjustZoom(0.1)}
+                  disabled={zoomLevel >= 1.5}
+                  className="p-1 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition disabled:opacity-30 cursor-pointer"
+                  title="Zoom In"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+                <div className="w-px h-3.5 bg-slate-200 dark:bg-slate-800 mx-1"></div>
+                <button
+                  onClick={resetZoom}
+                  className="p-1 text-slate-400 dark:text-slate-500 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                  title="Reset Zoom"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+
+            {/* Middle Column: Address Bar Emulator */}
+            <div className="flex items-center gap-2 w-full md:max-w-md bg-white dark:bg-slate-950 px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+              <Lock className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
               <span className="text-xs text-slate-500 dark:text-slate-400 font-mono truncate select-all">
-                {resultsUrl}
+                beu-bih.ac.in/result-one
               </span>
             </div>
             
-            {/* Viewport Emulator Toggles */}
-            <div className="flex items-center gap-1 bg-slate-200 dark:bg-slate-700 p-1 rounded-xl">
+            {/* Right Column: Viewport Toggles & Fullscreen Toggle */}
+            <div className="flex items-center justify-between w-full md:w-auto gap-3">
+              {/* Viewport Emulator Toggles */}
+              <div className="flex items-center gap-0.5 bg-slate-200 dark:bg-slate-700/60 p-0.5 rounded-xl">
+                <button
+                  onClick={() => {
+                    setIsLoading(true);
+                    setViewMode("desktop");
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    viewMode === "desktop"
+                      ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                  }`}
+                >
+                  <Monitor className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Desktop</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setIsLoading(true);
+                    setViewMode("mobile");
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    viewMode === "mobile"
+                      ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                  }`}
+                >
+                  <Smartphone className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Mobile</span>
+                </button>
+              </div>
+
+              {/* Fullscreen Toggle */}
               <button
-                onClick={() => {
-                  setIsLoading(true);
-                  setViewMode("desktop");
-                }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                  viewMode === "desktop"
-                    ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
-                }`}
+                onClick={toggleFullscreen}
+                className="p-2 bg-white dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs transition cursor-pointer"
+                title={isFullscreen ? "Exit Fullscreen" : "Fullscreen View"}
               >
-                <Monitor className="w-3.5 h-3.5" />
-                Desktop View
-              </button>
-              <button
-                onClick={() => {
-                  setIsLoading(true);
-                  setViewMode("mobile");
-                }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                  viewMode === "mobile"
-                    ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
-                }`}
-              >
-                <Smartphone className="w-3.5 h-3.5" />
-                Mobile View
+                {isFullscreen ? (
+                  <Minimize2 className="w-4 h-4" />
+                ) : (
+                  <Maximize2 className="w-4 h-4" />
+                )}
               </button>
             </div>
           </div>
 
           {/* Device Wrapper and Iframe viewport */}
-          <div className="bg-slate-50 dark:bg-slate-950 p-4 sm:p-8 flex justify-center items-center transition-all duration-300">
+          <div className={`bg-slate-50 dark:bg-slate-950 flex justify-center items-center transition-all duration-300 relative ${
+            isFullscreen ? "flex-grow h-0 w-full" : "p-4 sm:p-8"
+          }`}>
             <div
-              className={`relative bg-white shadow-2xl transition-all duration-300 ${
-                viewMode === "mobile"
-                  ? "w-[375px] h-[667px] rounded-[40px] border-[12px] border-slate-900 dark:border-slate-800 ring-4 ring-slate-200 dark:ring-slate-900/50 overflow-hidden"
-                  : "w-full h-[700px] rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden"
+              ref={containerRef}
+              className={`relative bg-white shadow-2xl transition-all duration-300 overflow-hidden ${
+                isFullscreen
+                  ? "w-full h-full border-0"
+                  : viewMode === "mobile"
+                  ? "w-[375px] h-[667px] rounded-[40px] border-[12px] border-slate-900 dark:border-slate-800 ring-4 ring-slate-200/50 dark:ring-slate-900/50"
+                  : "w-full h-[700px] rounded-2xl border border-slate-200 dark:border-slate-800"
               }`}
             >
-              {/* Mobile Top Sensor if in mobile view */}
-              {viewMode === "mobile" && (
+              {/* Mobile Top Sensor if in mobile view and not fullscreen */}
+              {viewMode === "mobile" && !isFullscreen && (
                 <div className="absolute top-0 inset-x-0 h-6 bg-slate-900 dark:bg-slate-800 flex justify-center items-center z-20">
                   <div className="w-16 h-4 bg-black rounded-b-xl"></div>
                 </div>
               )}
 
+              {/* Secure Loader overlay */}
               {isLoading && (
-                <div className="absolute inset-0 bg-slate-50/80 dark:bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center z-10 transition-all duration-300">
-                  <RefreshCw className="w-8 h-8 text-blue-500 animate-spin mb-4" />
-                  <p className="text-slate-600 dark:text-slate-300 text-sm font-semibold flex items-center gap-2">
-                    <Globe className="w-4 h-4 text-blue-500 animate-pulse" /> Connecting to BEU...
+                <div className="absolute inset-0 bg-slate-50/90 dark:bg-slate-950/90 backdrop-blur-xs flex flex-col items-center justify-center z-10 transition-all duration-300">
+                  <div className="relative w-12 h-12 flex items-center justify-center mb-4">
+                    <RefreshCw className="w-10 h-10 text-blue-500 animate-spin absolute" />
+                    <Lock className="w-4 h-4 text-emerald-500 animate-pulse" />
+                  </div>
+                  <p className="text-slate-700 dark:text-slate-300 text-sm font-bold flex items-center gap-2 tracking-wide">
+                    <Globe className="w-4 h-4 text-blue-500 animate-pulse" /> Connecting Secure BEU Node...
                   </p>
-                  <p className="text-slate-400 dark:text-slate-500 text-xs mt-1.5 font-medium">
-                    Loading results board...
+                  <p className="text-slate-400 dark:text-slate-500 text-xs mt-2 font-medium">
+                    Applying inverse transformation matrix...
                   </p>
                 </div>
               )}
@@ -207,13 +363,14 @@ export default function Results() {
               <iframe
                 key={`${viewMode}-${iframeKey}`}
                 src={`/api/beu-proxy/result-one?mode=${viewMode}&v=${iframeKey}`}
-                className="w-full h-full border-0 bg-white"
+                style={iframeStyle}
                 title="BEU Results Page"
                 onLoad={() => setIsLoading(false)}
+                sandbox="allow-scripts allow-same-origin allow-forms"
               />
 
               {/* Mobile Bottom Bar indicator */}
-              {viewMode === "mobile" && (
+              {viewMode === "mobile" && !isFullscreen && (
                 <div className="absolute bottom-1 inset-x-0 flex justify-center z-20 pointer-events-none">
                   <div className="w-28 h-1 bg-slate-400 dark:bg-slate-600 rounded-full"></div>
                 </div>

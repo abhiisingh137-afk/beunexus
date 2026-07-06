@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import http from "http";
 import https from "https";
 import { createServer as createViteServer } from "vite";
 
@@ -246,107 +247,199 @@ async function startServer() {
     // Build the target URL for Bihar Engineering University server
     let targetPath = req.path;
     if (targetPath === "/" || targetPath === "") {
-      const page = req.query.page || "notification";
+      const page = req.query.page || "result-one";
       targetPath = `/${page}`;
     }
 
-    const targetUrl = `https://beu-bih.ac.in${targetPath}`;
+    // Build the query string dynamically, preserving parameters while stripping out app-specific routing parameters
+    const queryParams = new URLSearchParams();
+    for (const [key, val] of Object.entries(req.query)) {
+      if (key !== "mode" && key !== "v") {
+        queryParams.append(key, String(val));
+      }
+    }
+    const queryString = queryParams.toString();
+    const targetUrl = `https://beu-bih.ac.in${targetPath}${queryString ? "?" + queryString : ""}`;
+
+    // Clean up request headers before forwarding
+    const headers: Record<string, string> = {};
+    
+    // Copy headers cleanly
+    Object.keys(req.headers).forEach((key) => {
+      if (req.headers[key] !== undefined) {
+        headers[key.toLowerCase()] = String(req.headers[key]);
+      }
+    });
+
+    delete headers["host"];
+    delete headers["connection"];
+    
+    // Set referer and origin to point to the university itself so WAF/CSRF protection doesn't block us
+    headers["referer"] = "https://beu-bih.ac.in/result-one";
+    headers["origin"] = "https://beu-bih.ac.in";
+    
+    // Request plain uncompressed content so we can parse and rewrite URLs
+    headers["accept-encoding"] = "identity";
+    headers["user-agent"] = userAgent;
 
     const options = {
+      method: req.method,
       rejectUnauthorized: false,
-      headers: {
-        "User-Agent": userAgent,
-        "Accept": req.headers["accept"] || "*/*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "identity" // Disable compression so we can edit HTML
-      },
-      timeout: 15000
+      headers: headers,
+      timeout: 25000
     };
 
     try {
-      const request = https.get(targetUrl, options, (resTarget) => {
+      const isHttps = targetUrl.startsWith("https");
+      const targetModule = isHttps ? https : http;
+
+      const clientRequest = targetModule.request(targetUrl, options, (resTarget) => {
         // Handle redirect
         if (resTarget.statusCode && resTarget.statusCode >= 300 && resTarget.statusCode < 400 && resTarget.headers.location) {
-          const redirectUrl = resTarget.headers.location.startsWith("http")
-            ? resTarget.headers.location
-            : new URL(resTarget.headers.location, targetUrl).toString();
+          let redirectLocation = resTarget.headers.location;
           
-          https.get(redirectUrl, options, (redRes) => {
-            const contentType = redRes.headers["content-type"] || "";
-            if (contentType) {
-              res.setHeader("Content-Type", contentType);
-            }
-            
-            const isResponseHtml = contentType.includes("text/html");
-            if (isResponseHtml) {
-              let data = "";
-              redRes.on("data", (chunk) => data += chunk);
-              redRes.on("end", () => {
-                let finalPath = targetPath;
-                try {
-                  const redirectPathname = new URL(redirectUrl).pathname;
-                  if (redirectPathname) finalPath = redirectPathname;
-                } catch (_) {}
+          if (!redirectLocation.startsWith("http")) {
+            redirectLocation = new URL(redirectLocation, `https://beu-bih.ac.in`).toString();
+          }
 
-                const baseTag = `<base href="/api/beu-proxy/" />`;
-                if (data.toLowerCase().includes("<head>")) {
-                  data = data.replace(/<head>/i, `<head>\n  ${baseTag}`);
-                } else {
-                  data = `<head>\n  ${baseTag}\n</head>\n${data}`;
-                }
-                res.setHeader("X-Frame-Options", "ALLOWALL");
-                res.setHeader("Content-Security-Policy", "frame-ancestors *");
-                res.send(data);
-              });
-            } else {
-              redRes.pipe(res);
+          try {
+            const parsedUrl = new URL(redirectLocation);
+            if (parsedUrl.hostname === "beu-bih.ac.in") {
+              // Stay inside the secure proxy routing
+              redirectLocation = `/api/beu-proxy${parsedUrl.pathname}${parsedUrl.search}`;
             }
-          }).on("error", (e) => {
-            console.error("Redirect proxy fetch error: ", e);
-            res.status(500).send("Error fetching redirected resource");
+          } catch (_) {}
+
+          res.writeHead(resTarget.statusCode, {
+            "Location": redirectLocation,
+            "X-Frame-Options": "ALLOWALL",
+            "Content-Security-Policy": "frame-ancestors *"
           });
+          res.end();
           return;
         }
 
-        // Set response headers
-        const contentType = resTarget.headers["content-type"] || "";
-        if (contentType) {
-          res.setHeader("Content-Type", contentType);
-        }
+        // Set response headers, skipping original safety restrictors to permit embedding in iframe
+        Object.keys(resTarget.headers).forEach((key) => {
+          const lowerKey = key.toLowerCase();
+          if (
+            lowerKey !== "x-frame-options" &&
+            lowerKey !== "content-security-policy" &&
+            lowerKey !== "content-security-policy-report-only" &&
+            lowerKey !== "cross-origin-resource-policy" &&
+            lowerKey !== "cross-origin-embedder-policy"
+          ) {
+            res.setHeader(key, resTarget.headers[key]!);
+          }
+        });
 
-        const isResponseHtml = contentType.includes("text/html");
-        if (isResponseHtml) {
+        // Inject headers to allow iframe rendering
+        res.setHeader("X-Frame-Options", "ALLOWALL");
+        res.setHeader("Content-Security-Policy", "frame-ancestors *");
+
+        const contentType = resTarget.headers["content-type"] || "";
+        const lowerContentType = contentType.toLowerCase();
+        const isHtml = lowerContentType.includes("text/html");
+        const isJs = lowerContentType.includes("javascript") || lowerContentType.includes("application/x-javascript");
+        const isCss = lowerContentType.includes("text/css");
+        const isJson = lowerContentType.includes("application/json");
+
+        if (isHtml || isJs || isCss || isJson) {
           let data = "";
-          resTarget.on("data", (chunk) => data += chunk);
+          resTarget.on("data", (chunk) => {
+            data += chunk;
+          });
           resTarget.on("end", () => {
-            const baseTag = `<base href="/api/beu-proxy/" />`;
-            if (data.toLowerCase().includes("<head>")) {
-              data = data.replace(/<head>/i, `<head>\n  ${baseTag}`);
-            } else {
-              data = `<head>\n  ${baseTag}\n</head>\n${data}`;
+            let bodyStr = data;
+
+            // 1. HTML Specific Rewriting
+            if (isHtml) {
+              const baseTag = `<base href="/api/beu-proxy/" />`;
+              if (bodyStr.toLowerCase().includes("<head>")) {
+                bodyStr = bodyStr.replace(/<head>/i, `<head>\n  ${baseTag}`);
+              } else {
+                bodyStr = `<head>\n  ${baseTag}\n</head>\n${bodyStr}`;
+              }
+
+              // Rewrite root-relative links/sources inside the HTML to point to the proxy
+              bodyStr = bodyStr.replace(/(href|src|action|data-url)=(["'])\/([^\s"'>]+)\2/gi, (match, attr, quote, path) => {
+                if (path.startsWith("api/") || path.startsWith("http")) {
+                  return match;
+                }
+                return `${attr}=${quote}/api/beu-proxy/${path}${quote}`;
+              });
+
+              // Fallback unquoted attributes rewrite:
+              bodyStr = bodyStr.replace(/(href|src|action|data-url)=\/([^\s"'>]+)/gi, (match, attr, path) => {
+                if (path.startsWith("api/") || path.startsWith("http")) {
+                  return match;
+                }
+                return `${attr}="/api/beu-proxy/${path}"`;
+              });
+
+              // Rewrite CSS urls starting with "/"
+              bodyStr = bodyStr.replace(/url\(["']?\/([^\s"')]+)["']?\)/gi, "url('/api/beu-proxy/$1')");
+
+              // Eliminate Frame-Busting scripts from running and breaking the layout
+              bodyStr = bodyStr.replace(/top\.location\s*=/gi, "self.location =");
+              bodyStr = bodyStr.replace(/parent\.location\s*=/gi, "self.location =");
+              bodyStr = bodyStr.replace(/window\.top\s*=/gi, "window.self =");
+              bodyStr = bodyStr.replace(/window\.parent\s*=/gi, "window.self =");
+              bodyStr = bodyStr.replace(/if\s*\(\s*top\s*!==?\s*self\s*\)/gi, "if (false)");
+              bodyStr = bodyStr.replace(/if\s*\(\s*self\s*!==?\s*top\s*\)/gi, "if (false)");
+              bodyStr = bodyStr.replace(/if\s*\(\s*window\.top\s*!==?\s*window\.self\s*\)/gi, "if (false)");
+              bodyStr = bodyStr.replace(/if\s*\(\s*window\.self\s*!==?\s*window\.top\s*\)/gi, "if (false)");
             }
-            res.setHeader("X-Frame-Options", "ALLOWALL");
-            res.setHeader("Content-Security-Policy", "frame-ancestors *");
-            res.send(data);
+
+            // 2. Global API Endpoints and hardcoded URL Rewriting (CORS bypass)
+            // Replace absolute BEU URLs with relative paths pointing back to our proxy
+            bodyStr = bodyStr.replace(/https:\/\/beu-bih\.ac\.in\//gi, "/api/beu-proxy/");
+            bodyStr = bodyStr.replace(/https:\/\/beu-bih\.ac\.in/gi, "/api/beu-proxy");
+
+            // 3. Javascript Specific Frame-Busting / Iframe Sandbox Bypass
+            if (isJs) {
+              bodyStr = bodyStr.replace(/window\.top\s*!==?\s*window\.self/gi, "false");
+              bodyStr = bodyStr.replace(/window\.self\s*!==?\s*window\.top/gi, "false");
+              bodyStr = bodyStr.replace(/top\s*!==?\s*self/gi, "false");
+              bodyStr = bodyStr.replace(/self\s*!==?\s*top/gi, "false");
+            }
+
+            res.send(bodyStr);
           });
         } else {
+          // For binary assets (styles, scripts, images, fonts), stream them directly
           resTarget.pipe(res);
         }
       });
 
-      request.on("error", (err) => {
+      clientRequest.on("error", (err) => {
         console.error("Proxy connection error: ", err);
-        res.status(500).send("Proxy error");
+        res.status(500).send("Proxy connection failed");
       });
 
-      request.on("timeout", () => {
-        request.destroy();
+      clientRequest.on("timeout", () => {
+        clientRequest.destroy();
         res.status(504).send("Proxy timeout");
       });
 
+      // Stream requests body correctly for GET/POST methods
+      const method = req.method.toUpperCase();
+      if (method === "GET" || method === "HEAD" || method === "DELETE") {
+        clientRequest.end();
+      } else {
+        // If a body parser already parsed it, we need to write it out
+        if (req.body && Object.keys(req.body).length > 0) {
+          const bodyData = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
+          clientRequest.write(bodyData);
+          clientRequest.end();
+        } else {
+          req.pipe(clientRequest);
+        }
+      }
+
     } catch (error) {
       console.error("Proxy exception: ", error);
-      res.status(500).send("Proxy error");
+      res.status(500).send("Proxy error exception");
     }
   });
 
