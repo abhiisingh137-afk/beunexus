@@ -21,6 +21,7 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import ContactUs from "./pages/ContactUs";
 import Sitemap from "./pages/Sitemap";
 import Gate from "./pages/Gate";
+import MaterialsBot from "./pages/MaterialsBot";
 
 export default function App() {
   const [page, setPage] = useState<string>("home");
@@ -198,6 +199,7 @@ export default function App() {
         {page === "contact" && <ContactUs />}
         {page === "sitemap" && <Sitemap setPage={navigateToPage} />}
         {page === "gate" && <Gate />}
+        {page === "bot-materials" && <MaterialsBot />}
         
         {page === "admin-login" && (
           <AdminLogin

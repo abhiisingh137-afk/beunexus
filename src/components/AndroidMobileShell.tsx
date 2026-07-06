@@ -22,7 +22,8 @@ import {
   Signal,
   Calculator,
   UserCheck,
-  Award
+  Award,
+  Bot
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -98,6 +99,8 @@ export default function AndroidMobileShell({
         return "Previous Year Papers";
       case "gate":
         return "GATE Exam Hub";
+      case "bot-materials":
+        return "Materials Bot Hub";
       case "lectures":
         return "Video Lectures";
       case "results":
@@ -128,6 +131,7 @@ export default function AndroidMobileShell({
   const auxiliaryServices = [
     { id: "syllabus", label: "Syllabus", icon: BookOpen, color: "text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30" },
     { id: "gate", label: "GATE Hub", icon: Award, color: "text-blue-500 bg-blue-50 dark:bg-blue-950/30" },
+    { id: "bot-materials", label: "Bot Uploads", icon: Bot, color: "text-indigo-500 bg-indigo-50 dark:bg-indigo-950/30" },
     { id: "lectures", label: "Lectures", icon: Video, color: "text-red-500 bg-red-50 dark:bg-red-950/30" },
     { id: "notices", label: "Notices", icon: Bell, color: "text-amber-500 bg-amber-50 dark:bg-amber-950/30" },
     { id: "results", label: "Results", icon: Trophy, color: "text-purple-500 bg-purple-50 dark:bg-purple-950/30" },

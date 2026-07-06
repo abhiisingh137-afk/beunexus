@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { BookOpen, LogIn, LayoutDashboard, LogOut, Menu, X, Landmark, GraduationCap, Calendar, Calculator, FileText, Video, Bell, Trophy, Sun, Moon, Award } from "lucide-react";
+import { BookOpen, LogIn, LayoutDashboard, LogOut, Menu, X, Landmark, GraduationCap, Calendar, Calculator, FileText, Video, Bell, Trophy, Sun, Moon, Award, Bot } from "lucide-react";
 
 interface NavbarProps {
   currentPage: string;
@@ -19,6 +19,7 @@ export default function Navbar({ currentPage, setPage, isAdmin, onLogout, darkMo
     { id: "notes", label: "Notes", icon: FileText },
     { id: "pyqs", label: "PYQs", icon: GraduationCap },
     { id: "gate", label: "GATE Hub", icon: Award },
+    { id: "bot-materials", label: "Bot Uploads", icon: Bot },
     { id: "lectures", label: "Lectures", icon: Video },
     { id: "notices", label: "Notices", icon: Bell },
     { id: "results", label: "Results", icon: Trophy },

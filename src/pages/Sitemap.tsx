@@ -11,6 +11,7 @@ export default function Sitemap({ setPage }: { setPage: (page: string) => void }
         { name: "Notes Repository", id: "notes", desc: "Subject notes compiled and vetted by toppers" },
         { name: "PYQs Catalog", id: "pyqs", desc: "Semester previous year question papers" },
         { name: "GATE Preparation Hub", id: "gate", desc: "Interactive GATE syllabus branches and solved papers from 2018-2025" },
+        { name: "Telegram Upload Bot", id: "bot-materials", desc: "Submit notes via Telegram and download them in a real-time web directory" },
         { name: "Video Lectures", id: "lectures", desc: "Curated YouTube playlists mapped to BEU courses" }
       ]
     },

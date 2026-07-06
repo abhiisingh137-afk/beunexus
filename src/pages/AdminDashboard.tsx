@@ -2,7 +2,24 @@ import React, { useState, useEffect } from "react";
 import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { SyllabusItem, NoteItem, PYQItem, LectureItem, BranchType, SemesterType } from "../types";
-import { LayoutDashboard, BookOpen, FileText, GraduationCap, Video, Plus, Trash2, RefreshCw, LogOut, CheckCircle, AlertCircle, Eye, Search, Layers } from "lucide-react";
+import { LayoutDashboard, BookOpen, FileText, GraduationCap, Video, Plus, Trash2, RefreshCw, LogOut, CheckCircle, AlertCircle, Eye, Search, Layers, Edit3, Save, X, Bot } from "lucide-react";
+
+interface TelegramMaterial {
+  id?: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  fileId: string;
+  caption: string;
+  uploaderName: string;
+  uploaderUsername?: string;
+  channelPostId?: number;
+  createdAt: string;
+  branch?: BranchType;
+  semester?: SemesterType;
+  subject?: string;
+  secretCode?: string;
+}
 
 interface AdminDashboardProps {
   showToast: (text: string, type: "success" | "error" | "info" | "warning") => void;
@@ -10,7 +27,7 @@ interface AdminDashboardProps {
 }
 
 export default function AdminDashboard({ showToast, onLogout }: AdminDashboardProps) {
-  const [activeTab, setActiveTab] = useState<"syllabus" | "notes" | "pyqs" | "lectures">("syllabus");
+  const [activeTab, setActiveTab] = useState<"syllabus" | "notes" | "pyqs" | "lectures" | "telegram">("syllabus");
   const [loading, setLoading] = useState(false);
 
   // Lists from Firestore
@@ -18,6 +35,14 @@ export default function AdminDashboard({ showToast, onLogout }: AdminDashboardPr
   const [notes, setNotes] = useState<NoteItem[]>([]);
   const [pyqs, setPyqs] = useState<PYQItem[]>([]);
   const [lectures, setLectures] = useState<LectureItem[]>([]);
+  const [telegramMaterials, setTelegramMaterials] = useState<TelegramMaterial[]>([]);
+
+  // Telegram editing state
+  const [editingMaterial, setEditingMaterial] = useState<TelegramMaterial | null>(null);
+  const [editBranch, setEditBranch] = useState<BranchType>("CSE");
+  const [editSemester, setEditSemester] = useState<SemesterType>(3);
+  const [editSubject, setEditSubject] = useState("");
+  const [editCaption, setEditCaption] = useState("");
 
   // Form Fields
   const branches: BranchType[] = ["CSE", "ECE", "ME", "CE", "EE", "IT"];
@@ -87,6 +112,14 @@ export default function AdminDashboard({ showToast, onLogout }: AdminDashboardPr
       const lList: LectureItem[] = [];
       lSnap.forEach((doc) => lList.push({ id: doc.id, ...doc.data() } as LectureItem));
       setLectures(lList);
+
+      // Telegram materials
+      const tSnap = await getDocs(collection(db, "telegram_materials"));
+      const tList: TelegramMaterial[] = [];
+      tSnap.forEach((doc) => tList.push({ id: doc.id, ...doc.data() } as TelegramMaterial));
+      // Sort by createdAt descending safely
+      tList.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      setTelegramMaterials(tList);
     } catch (error) {
       console.error("Error loading administrative datasets: ", error);
       showToast("Fail-safe: Connecting to Firestore failed or is offline.", "error");
@@ -253,6 +286,59 @@ export default function AdminDashboard({ showToast, onLogout }: AdminDashboardPr
     }
   };
 
+  // DELETE TELEGRAM MATERIAL
+  const handleDeleteTelegramMaterial = async (id: string, existingSecretCode?: string) => {
+    if (!window.confirm("Are you sure you want to delete this student upload? This action is irreversible.")) return;
+
+    try {
+      const docRef = doc(db, "telegram_materials", id);
+      // If there's no secretCode stored on the existing doc, we add it first so that the firestore.rules allow deletion
+      if (existingSecretCode !== secretCode) {
+        await updateDoc(docRef, {
+          secretCode: secretCode
+        });
+      }
+      await deleteDoc(docRef);
+      showToast("Student upload removed from cloud.", "success");
+      fetchAllData();
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to remove student upload.", "error");
+    }
+  };
+
+  // START EDITING TELEGRAM MATERIAL
+  const handleStartEditTelegram = (mat: TelegramMaterial) => {
+    setEditingMaterial(mat);
+    setEditBranch(mat.branch || "CSE");
+    setEditSemester(mat.semester || 3);
+    setEditSubject(mat.subject || "");
+    setEditCaption(mat.caption || "");
+  };
+
+  // UPDATE TELEGRAM MATERIAL
+  const handleUpdateMaterial = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMaterial || !editingMaterial.id) return;
+
+    try {
+      const docRef = doc(db, "telegram_materials", editingMaterial.id);
+      await updateDoc(docRef, {
+        branch: editBranch,
+        semester: editSemester,
+        subject: editSubject.trim(),
+        caption: editCaption.trim(),
+        secretCode: secretCode
+      });
+      showToast("Telegram material details updated successfully!", "success");
+      setEditingMaterial(null);
+      fetchAllData();
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to update telegram material details.", "error");
+    }
+  };
+
   return (
     <div id="admin-dashboard-container" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       {/* Header */}
@@ -283,7 +369,7 @@ export default function AdminDashboard({ showToast, onLogout }: AdminDashboardPr
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6 mb-10">
         <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm">
           <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Total Syllabi</span>
           <span className="text-2xl font-extrabold text-blue-600 font-mono">{syllabi.length}</span>
@@ -299,6 +385,10 @@ export default function AdminDashboard({ showToast, onLogout }: AdminDashboardPr
         <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm">
           <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Lectures Curated</span>
           <span className="text-2xl font-extrabold text-blue-600 font-mono">{lectures.length}</span>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm col-span-2 lg:col-span-1">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Student Uploads</span>
+          <span className="text-2xl font-extrabold text-indigo-600 font-mono">{telegramMaterials.length}</span>
         </div>
       </div>
 
@@ -344,6 +434,16 @@ export default function AdminDashboard({ showToast, onLogout }: AdminDashboardPr
         >
           <Video className="w-4 h-4" /> Manage Lectures
         </button>
+        <button
+          onClick={() => setActiveTab("telegram")}
+          className={`flex items-center gap-1.5 px-4 py-3 text-sm font-semibold transition border-b-2 -mb-0.5 cursor-pointer ${
+            activeTab === "telegram"
+              ? "border-indigo-600 text-indigo-600"
+              : "border-transparent text-slate-500 hover:text-indigo-600"
+          }`}
+        >
+          <Bot className="w-4 h-4" /> Student Uploads
+        </button>
       </div>
 
       {/* TAB CONTENTS */}
@@ -351,8 +451,17 @@ export default function AdminDashboard({ showToast, onLogout }: AdminDashboardPr
         {/* LEFT COLUMN: ADD NEW FORM */}
         <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm self-start">
           <h2 className="text-base font-bold text-slate-900 mb-6 flex items-center gap-2 uppercase tracking-wider font-sans">
-            <Plus className="w-5 h-5 text-blue-500" />
-            Upload {activeTab}
+            {activeTab === "telegram" ? (
+              <>
+                <Bot className="w-5 h-5 text-indigo-500" />
+                Student Material Panel
+              </>
+            ) : (
+              <>
+                <Plus className="w-5 h-5 text-blue-500" />
+                Upload {activeTab}
+              </>
+            )}
           </h2>
 
           {/* SYLLABUS FORM */}
@@ -702,6 +811,89 @@ export default function AdminDashboard({ showToast, onLogout }: AdminDashboardPr
               </button>
             </form>
           )}
+
+          {activeTab === "telegram" && (
+            <div>
+              {editingMaterial ? (
+                <form onSubmit={handleUpdateMaterial} className="space-y-4">
+                  <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 mb-4 text-xs text-indigo-800">
+                    <p className="font-bold mb-1">Editing Student Upload:</p>
+                    <p className="font-mono truncate">{editingMaterial.fileName}</p>
+                    <p className="mt-1">By: <strong>{editingMaterial.uploaderName}</strong> {editingMaterial.uploaderUsername && `@${editingMaterial.uploaderUsername}`}</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">Branch</label>
+                    <select
+                      value={editBranch}
+                      onChange={(e) => setEditBranch(e.target.value as BranchType)}
+                      className="w-full text-xs font-semibold px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 transition cursor-pointer"
+                    >
+                      {branches.map((b) => <option key={b} value={b}>{b}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">Semester</label>
+                    <select
+                      value={editSemester}
+                      onChange={(e) => setEditSemester(parseInt(e.target.value) as SemesterType)}
+                      className="w-full text-xs font-semibold px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 transition cursor-pointer"
+                    >
+                      {semesters.map((s) => <option key={s} value={s}>Semester {s}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">Subject mapping</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g., Operating Systems"
+                      value={editSubject}
+                      onChange={(e) => setEditSubject(e.target.value)}
+                      className="w-full text-xs font-semibold px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:outline-none transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">Caption / Description</label>
+                    <textarea
+                      required
+                      placeholder="Brief summary or details..."
+                      value={editCaption}
+                      onChange={(e) => setEditCaption(e.target.value)}
+                      rows={3}
+                      className="w-full text-xs font-semibold px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:outline-none transition"
+                    ></textarea>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="submit"
+                      className="flex-grow flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 rounded-xl transition cursor-pointer"
+                    >
+                      <Save className="w-3.5 h-3.5" /> Save Changes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingMaterial(null)}
+                      className="flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" /> Cancel
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="text-center py-12 text-slate-400">
+                  <Bot className="w-10 h-10 mx-auto text-slate-300 mb-2 animate-pulse" />
+                  <p className="text-xs font-medium leading-relaxed">
+                    Select any student upload from the list and click the <strong>Edit icon</strong> to re-classify its branch, semester, subject or description.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* RIGHT COLUMN: LIST AND MANAGE */}
@@ -787,10 +979,47 @@ export default function AdminDashboard({ showToast, onLogout }: AdminDashboardPr
               </div>
             ))}
 
+            {activeTab === "telegram" && telegramMaterials.map((t) => (
+              <div key={t.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex justify-between items-center gap-4">
+                <div className="truncate flex-grow">
+                  <span className="inline-block text-[9px] font-bold tracking-wider bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded uppercase mr-2">
+                    {t.branch || "Not Set"} • Sem {t.semester || "Not Set"}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono font-bold truncate">
+                    {t.subject || "Peer Contributed"}
+                  </span>
+                  <h4 className="font-bold text-slate-900 text-sm truncate mt-1" title={t.fileName}>{t.fileName}</h4>
+                  <p className="text-[10px] text-slate-500 truncate mt-1">
+                    Uploaded by: <span className="font-bold text-slate-700">{t.uploaderName}</span> {t.uploaderUsername ? `@${t.uploaderUsername}` : ""}
+                  </p>
+                  <p className="text-[10px] text-blue-600 font-medium truncate mt-1" title={t.caption}>
+                    {t.caption || "No description provided."}
+                  </p>
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  <button
+                    onClick={() => handleStartEditTelegram(t)}
+                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition cursor-pointer"
+                    title="Edit/Re-classify Material"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteTelegramMaterial(t.id!, t.secretCode)}
+                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition cursor-pointer"
+                    title="Delete Material"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+
             {((activeTab === "syllabus" && syllabi.length === 0) ||
               (activeTab === "notes" && notes.length === 0) ||
               (activeTab === "pyqs" && pyqs.length === 0) ||
-              (activeTab === "lectures" && lectures.length === 0)) && (
+              (activeTab === "lectures" && lectures.length === 0) ||
+              (activeTab === "telegram" && telegramMaterials.length === 0)) && (
               <div className="text-center py-20 text-slate-400">
                 <AlertCircle className="w-10 h-10 mx-auto text-slate-300 mb-2" />
                 <p className="text-xs font-medium">No records available for this collection in Firestore.</p>

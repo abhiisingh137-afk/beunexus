@@ -1,5 +1,5 @@
 import React from "react";
-import { BookOpen, FileText, GraduationCap, Video, Bell, Trophy, Calculator, Calendar, ArrowRight, Sparkles, Server, CheckCircle2, Search, Star, Quote, Shield, Zap, Users, ThumbsUp, Send, Award } from "lucide-react";
+import { BookOpen, FileText, GraduationCap, Video, Bell, Trophy, Calculator, Calendar, ArrowRight, Sparkles, Server, CheckCircle2, Search, Star, Quote, Shield, Zap, Users, ThumbsUp, Send, Award, Bot } from "lucide-react";
 
 interface HomeProps {
   setPage: (page: string) => void;
@@ -42,6 +42,15 @@ export default function Home({ setPage }: HomeProps) {
       color: "from-blue-500 to-indigo-700",
       textColor: "text-indigo-600",
       bgColor: "bg-indigo-50"
+    },
+    {
+      id: "bot-materials",
+      title: "Telegram Upload Bot",
+      desc: "Submit class notes and papers on Telegram and access them in our live web directory.",
+      icon: Bot,
+      color: "from-indigo-500 to-slate-900",
+      textColor: "text-indigo-600",
+      bgColor: "bg-indigo-50/50"
     },
     {
       id: "lectures",
@@ -432,7 +441,7 @@ export default function Home({ setPage }: HomeProps) {
               </a>
               <a
                 id="send-telegram-bot-btn"
-                href="https://t.me/nexusBEU_bot"
+                href="https://t.me/nexusbeubot"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-blue-700/40 hover:bg-blue-700/60 text-white font-bold px-8 py-4 rounded-2xl border border-white/20 transition-all focus:outline-none cursor-pointer text-center text-sm"

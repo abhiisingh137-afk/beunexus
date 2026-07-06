@@ -3,6 +3,8 @@ import path from "path";
 import http from "http";
 import https from "https";
 import { createServer as createViteServer } from "vite";
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, getDoc, setDoc, collection, addDoc } from "firebase/firestore";
 
 // Utility to fetch page source securely bypassing potential SSL issues on university servers
 function fetchWithHttps(url: string): Promise<string> {
@@ -45,11 +47,395 @@ function fetchWithHttps(url: string): Promise<string> {
   });
 }
 
+// Telegram integration helpers
+function escapeHtml(unsafe: string): string {
+  if (!unsafe) return "";
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+async function callTelegram(token: string, method: string, payload: any): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const url = `https://api.telegram.org/bot${token}/${method}`;
+    const payloadStr = JSON.stringify(payload);
+    
+    const parsedUrl = new URL(url);
+    const options = {
+      hostname: parsedUrl.hostname,
+      path: parsedUrl.pathname,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(payloadStr)
+      }
+    };
+    
+    const req = https.request(options, (res) => {
+      let data = "";
+      res.on("data", (chunk) => {
+        data += chunk;
+      });
+      res.on("end", () => {
+        try {
+          const json = JSON.parse(data);
+          resolve(json);
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+    
+    req.on("error", (err) => {
+      reject(err);
+    });
+    
+    req.write(payloadStr);
+    req.end();
+  });
+}
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAXOWcw5FcDjwjjAheiOAyx_t209Npv5C4",
+  authDomain: "studycrate-3ecf8.firebaseapp.com",
+  projectId: "studycrate-3ecf8",
+  storageBucket: "studycrate-3ecf8.firebasestorage.app",
+  messagingSenderId: "588351424129",
+  appId: "1:588351424129:web:c61e77740168b166e2ef80"
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const serverDb = getFirestore(firebaseApp, "ai-studio-6ed392ca-dab3-4677-b296-362ab4a0f8f3");
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   app.use(express.json());
+
+  // ==================== TELEGRAM WEBHOOK PIPELINE ENDPOINTS ====================
+  
+  // Endpoint to query current webhook setup details and API queue status
+  app.get("/api/telegram/status", async (req, res) => {
+    try {
+      const configDoc = await getDoc(doc(serverDb, "settings", "telegram"));
+      if (!configDoc.exists()) {
+        return res.json({ webhookRegistered: false });
+      }
+      const { botToken } = configDoc.data();
+      if (!botToken) {
+        return res.json({ webhookRegistered: false });
+      }
+
+      const url = `https://api.telegram.org/bot${botToken}/getWebhookInfo`;
+      https.get(url, (telRes) => {
+        let body = "";
+        telRes.on("data", (chunk) => body += chunk);
+        telRes.on("end", () => {
+          try {
+            const info = JSON.parse(body);
+            if (info.ok && info.result) {
+              res.json({
+                webhookRegistered: !!info.result.url,
+                url: info.result.url,
+                pendingUpdateCount: info.result.pending_update_count,
+                lastErrorMessage: info.result.last_error_message || null,
+                lastErrorDate: info.result.last_error_date || null
+              });
+            } else {
+              res.json({ webhookRegistered: false, error: "Invalid response from Telegram API" });
+            }
+          } catch (e) {
+            res.json({ webhookRegistered: false, error: "Failed to parse Telegram response" });
+          }
+        });
+      }).on("error", (err) => {
+        res.json({ webhookRegistered: false, error: err.message });
+      });
+    } catch (error: any) {
+      res.json({ webhookRegistered: false, error: error.message });
+    }
+  });
+
+  // Setup Webhook: Register and save Telegram bot token and target Channel ID
+  app.post("/api/telegram/setup", async (req, res) => {
+    try {
+      const { botToken, channelId, secretCode } = req.body;
+      if (!botToken || !channelId) {
+        return res.status(400).json({ success: false, error: "Bot token and channel ID are required" });
+      }
+
+      if (secretCode !== "apnaBEU@admin2026") {
+        return res.status(401).json({ success: false, error: "Unauthorized: Invalid Admin Secret Code" });
+      }
+
+      let protocol = (req.headers["x-forwarded-proto"] as string) || "https";
+      let host = (req.headers["x-forwarded-host"] as string) || req.headers.host || "";
+
+      // Fallback: Parse Referer header to get the real public origin
+      if (req.headers.referer) {
+        try {
+          const refUrl = new URL(req.headers.referer as string);
+          if (refUrl.hostname && !refUrl.hostname.includes("localhost") && !refUrl.hostname.includes("127.0.0.1") && !refUrl.hostname.startsWith("0.0.0.0")) {
+            host = refUrl.host;
+            protocol = refUrl.protocol.replace(":", "");
+          }
+        } catch (e) {
+          // ignore parsing error
+        }
+      }
+
+      // If still local/sandboxed, use the public shared app URL as fallback for Telegram webhook
+      if (!host || host.includes("localhost") || host.includes("127.0.0.1") || host.startsWith("0.0.0.0") || host.includes("3000")) {
+        host = "ais-pre-ydxy5mpstxonppjiauw2lm-387554138614.asia-southeast1.run.app";
+        protocol = "https";
+      }
+
+      // Convert private development domain (ais-dev) to public shared preview domain (ais-pre) so Telegram can access it without login auth
+      if (host.includes("ais-dev-")) {
+        host = host.replace("ais-dev-", "ais-pre-");
+      }
+
+      const webhookUrl = `${protocol}://${host}/api/telegram/webhook`;
+
+      const setWebhookUrl = `https://api.telegram.org/bot${botToken}/setWebhook?url=${encodeURIComponent(webhookUrl)}`;
+      
+      https.get(setWebhookUrl, (telRes) => {
+        let body = "";
+        telRes.on("data", (chunk) => body += chunk);
+        telRes.on("end", async () => {
+          try {
+            const result = JSON.parse(body);
+            if (result.ok) {
+              await setDoc(doc(serverDb, "settings", "telegram"), {
+                botToken,
+                channelId,
+                webhookUrl,
+                secretCode: "apnaBEU@admin2026",
+                updatedAt: new Date().toISOString()
+              });
+              res.json({ success: true, message: result.description });
+            } else {
+              res.status(400).json({ success: false, error: result.description });
+            }
+          } catch (e: any) {
+            res.status(500).json({ success: false, error: "Failed to parse setWebhook response: " + e.message });
+          }
+        });
+      }).on("error", (err) => {
+        res.status(500).json({ success: false, error: "Telegram API registration failed: " + err.message });
+      });
+
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Webhook Receiver: Handles all incoming student messages from Telegram
+  app.post("/api/telegram/webhook", async (req, res) => {
+    res.status(200).send("OK"); // Return immediately to avoid re-deliveries
+
+    try {
+      const update = req.body;
+      console.log("Incoming Telegram webhook update payload:", JSON.stringify(update));
+      if (!update) return;
+
+      const message = update.message || update.edited_message;
+      if (!message) {
+        console.log("No message or edited_message found in the update payload.");
+        return;
+      }
+
+      const chatId = message.chat?.id;
+      if (!chatId) {
+        console.log("No chat ID available in message payload.");
+        return;
+      }
+
+      const messageId = message.message_id;
+      const document = message.document;
+      const photo = message.photo;
+      const caption = message.caption || "";
+
+      if (!document && !photo) {
+        const isStart = message.text && message.text.startsWith("/start");
+        
+        const welcomeText = `👋 <b>Welcome to the Apnabeu Student Materials Bot!</b> 🚀\n\nI will help you instantly upload and list your study materials (such as hand-written notes, syllabus, reference books, past year papers (PYQs), or college sheets) on our website directory!\n\n--------------------------------------------\n\n📥 <b>HOW TO UPLOAD MATERIALS THE RIGHT WAY:</b>\n\n1️⃣ <b>Attach your file:</b>\n   • Send any document (PDF, DOCX, ZIP) or a high-quality photo/image directly to me.\n   \n2️⃣ <b>Include details in the CAPTION (CRITICAL):</b>\n   • You must specify the <b>Branch</b> (e.g., CSE, ECE, ME, CE, EE, IT) and <b>Semester</b> (1st to 8th) in the caption text of the file before hitting send.\n   • Add the subject name and details so other students can find it easily!\n\n--------------------------------------------\n\n📝 <b>CAPTION FORMAT EXAMPLES:</b>\n\n✅ <i>"CSE 5th Sem - Compiler Design unit 3 notes by Neha"</i>\n✅ <i>"ECE 3rd Semester - Network Theory PYQs 2024"</i>\n✅ <i>"ME 4th Sem - Fluid Mechanics handbook"</i>\n\n--------------------------------------------\n\n💡 <b>WHAT HAPPENS NEXT?</b>\n• Once you send the file, our bot automatically extracts the branch and semester from your caption.\n• The file is safely logged in our official repository and published instantly on our website under <b>"Bot Uploads"</b> for everyone to download!\n\nLet's keep the peer contribution growing! Thank you for supporting your fellow students! 🌟`;
+        
+        const responseText = isStart 
+          ? welcomeText 
+          : `ℹ️ <b>To upload study materials to Apnabeu correctly:</b>\n\n1️⃣ Attach a document (PDF, DOCX, ZIP) or an image/photo.\n2️⃣ In the caption, specify the <b>Branch</b> (e.g., CSE, ECE, ME), <b>Semester</b> (e.g., 3rd Sem), and <b>Subject</b>.\n\n📝 <b>Example caption:</b>\n<i>"CSE 3rd Sem - Data Structures Notes by Rahul"</i>`;
+        
+        const configDoc = await getDoc(doc(serverDb, "settings", "telegram"));
+        if (configDoc.exists()) {
+          const { botToken } = configDoc.data();
+          if (botToken) {
+            const sendRes = await callTelegram(botToken, "sendMessage", { 
+              chat_id: chatId, 
+              text: responseText,
+              parse_mode: "HTML"
+            });
+            console.log("Telegram welcome/guide sendMessage API response:", sendRes);
+          } else {
+            console.error("Bot token is blank in settings/telegram Firestore document.");
+          }
+        } else {
+          console.error("settings/telegram document does not exist in Firestore. Please configure it in the Admin Dashboard.");
+        }
+        return;
+      }
+
+      const configDoc = await getDoc(doc(serverDb, "settings", "telegram"));
+      if (!configDoc.exists()) {
+        console.error("Webhook triggered but settings/telegram is missing in Firestore.");
+        return;
+      }
+      const { botToken, channelId } = configDoc.data();
+      if (!botToken || !channelId) {
+        console.error("Webhook missing token or channelId.");
+        return;
+      }
+
+      let fileId = "";
+      let fileName = "";
+      let fileSize = 0;
+      let mimeType = "";
+
+      if (document) {
+        fileId = document.file_id;
+        fileName = document.file_name || "Document.pdf";
+        fileSize = document.file_size || 0;
+        mimeType = document.mime_type || "application/pdf";
+      } else if (photo && photo.length > 0) {
+        const largestPhoto = photo[photo.length - 1];
+        fileId = largestPhoto.file_id;
+        fileName = `Photo_${Date.now()}.jpg`;
+        fileSize = largestPhoto.file_size || 0;
+        mimeType = "image/jpeg";
+      }
+
+      let branch = "CSE";
+      let semester = 3;
+
+      const upperCaption = caption.toUpperCase();
+      const branchMatches = upperCaption.match(/\b(CSE|ECE|ME|CE|EE|IT|CS)\b/);
+      if (branchMatches) {
+        branch = branchMatches[0] === "CS" ? "CSE" : branchMatches[0];
+      }
+
+      const semMatches = upperCaption.match(/\b([1-8])(?:ST|ND|RD|TH)?\s*(?:SEM|SEMESTER)?\b/i);
+      if (semMatches) {
+        semester = parseInt(semMatches[1]);
+      }
+
+      const uploaderName = [message.from?.first_name, message.from?.last_name].filter(Boolean).join(" ") || "Student Contributor";
+      const uploaderUsername = message.from?.username || "";
+
+      // 1. Forward to the target channel
+      const forwardRes = await callTelegram(botToken, "forwardMessage", {
+        chat_id: channelId,
+        from_chat_id: chatId,
+        message_id: messageId
+      });
+
+      let channelPostId: number | undefined;
+      if (forwardRes.ok && forwardRes.result) {
+        channelPostId = forwardRes.result.message_id;
+      }
+
+      // 2. Save material metadata to Firestore
+      await addDoc(collection(serverDb, "telegram_materials"), {
+        fileName,
+        fileSize,
+        mimeType,
+        fileId,
+        caption,
+        uploaderName,
+        uploaderUsername,
+        channelPostId,
+        branch,
+        semester,
+        secretCode: "apnaBEU@admin2026",
+        createdAt: new Date().toISOString()
+      });
+
+      // 3. Confirm to uploader
+      const safeFileName = escapeHtml(fileName);
+      const successText = `🎉 <b>Success!</b> Your study material <b>"${safeFileName}"</b> has been received, stored in our database, and forwarded to our official private channel.\n\nThank you for contributing! Your upload will appear live on our website under "Bot Uploads". 🚀`;
+      
+      const sendRes = await callTelegram(botToken, "sendMessage", {
+        chat_id: chatId,
+        text: successText,
+        parse_mode: "HTML"
+      });
+      console.log("Telegram upload confirmation sendMessage API response:", sendRes);
+
+    } catch (err) {
+      console.error("Webhook process exception: ", err);
+    }
+  });
+
+  // High-Speed Telegram Download Proxy Streaming Endpoint
+  app.get("/api/telegram/file/:file_id", async (req, res) => {
+    try {
+      const { file_id } = req.params;
+      if (!file_id) return res.status(400).send("File ID required");
+
+      const configDoc = await getDoc(doc(serverDb, "settings", "telegram"));
+      if (!configDoc.exists()) {
+        return res.status(500).send("Bot credentials not found");
+      }
+      const { botToken } = configDoc.data();
+      if (!botToken) {
+        return res.status(500).send("Bot credentials are blank");
+      }
+
+      const getFileUrl = `https://api.telegram.org/bot${botToken}/getFile?file_id=${file_id}`;
+      
+      https.get(getFileUrl, (telRes) => {
+        let body = "";
+        telRes.on("data", (chunk) => body += chunk);
+        telRes.on("end", () => {
+          try {
+            const data = JSON.parse(body);
+            if (!data.ok || !data.result || !data.result.file_path) {
+              return res.status(404).send("File path not found on Telegram servers");
+            }
+            
+            const filePath = data.result.file_path;
+            const directFileUrl = `https://api.telegram.org/file/bot${botToken}/${filePath}`;
+            
+            https.get(directFileUrl, (fileRes) => {
+              if (fileRes.headers["content-type"]) {
+                res.setHeader("Content-Type", fileRes.headers["content-type"]);
+              }
+              if (fileRes.headers["content-length"]) {
+                res.setHeader("Content-Length", fileRes.headers["content-length"]);
+              }
+              
+              const filename = path.basename(filePath);
+              res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+              
+              fileRes.pipe(res);
+            }).on("error", (err) => {
+              res.status(500).send("Failed to stream file: " + err.message);
+            });
+
+          } catch (e: any) {
+            res.status(500).send("Failed to parse Telegram file info: " + e.message);
+          }
+        });
+      }).on("error", (err) => {
+        res.status(500).send("Failed to get file from Telegram: " + err.message);
+      });
+
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
 
   // API Route for notices
   app.get("/api/notices", async (req, res) => {

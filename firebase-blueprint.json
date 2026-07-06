@@ -87,6 +87,41 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["title", "content", "date"]
+    },
+    "telegramMaterial": {
+      "title": "TelegramMaterial",
+      "description": "Student materials uploaded via Telegram Bot",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fileName": { "type": "string" },
+        "fileSize": { "type": "integer" },
+        "mimeType": { "type": "string" },
+        "fileId": { "type": "string" },
+        "caption": { "type": "string" },
+        "uploaderName": { "type": "string" },
+        "uploaderUsername": { "type": "string" },
+        "channelPostId": { "type": "integer" },
+        "branch": { "type": "string" },
+        "semester": { "type": "integer" },
+        "subject": { "type": "string" },
+        "secretCode": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fileName", "fileId", "createdAt"]
+    },
+    "telegramSettings": {
+      "title": "TelegramSettings",
+      "description": "Telegram bot setup credentials",
+      "type": "object",
+      "properties": {
+        "botToken": { "type": "string" },
+        "channelId": { "type": "string" },
+        "webhookUrl": { "type": "string" },
+        "secretCode": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["botToken", "channelId"]
     }
   },
   "firestore": {
@@ -109,6 +144,14 @@
     "notices": {
       "schema": "notice",
       "description": "Local or override notices for the BEU notice page"
+    },
+    "telegram_materials": {
+      "schema": "telegramMaterial",
+      "description": "Peer contributed and telegram bot uploaded files"
+    },
+    "settings": {
+      "schema": "telegramSettings",
+      "description": "Administrative and feature setup settings"
     }
   }
 }
