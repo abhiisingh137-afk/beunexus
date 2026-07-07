@@ -206,7 +206,14 @@ export default function MaterialsBot() {
         })
       });
 
-      const data = await res.json();
+      let data: any = {};
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(text.substring(0, 120) || `Server returned HTTP ${res.status}`);
+      }
 
       if (res.ok && data.success) {
         setConfigSuccess("Bot configured and Webhook successfully registered with Telegram!");
@@ -217,7 +224,7 @@ export default function MaterialsBot() {
       }
     } catch (err: any) {
       console.error(err);
-      setConfigError("Network error occurred during configuration registration.");
+      setConfigError(err.message || "Network error occurred during configuration registration.");
     } finally {
       setConfigLoading(false);
     }

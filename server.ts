@@ -71,7 +71,8 @@ async function callTelegram(token: string, method: string, payload: any): Promis
       headers: {
         "Content-Type": "application/json",
         "Content-Length": Buffer.byteLength(payloadStr)
-      }
+      },
+      timeout: 8000
     };
     
     const req = https.request(options, (res) => {
@@ -91,6 +92,11 @@ async function callTelegram(token: string, method: string, payload: any): Promis
     
     req.on("error", (err) => {
       reject(err);
+    });
+    
+    req.on("timeout", () => {
+      req.destroy();
+      reject(new Error("Telegram API request timed out (8s)"));
     });
     
     req.write(payloadStr);
