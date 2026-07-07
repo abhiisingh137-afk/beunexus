@@ -3,6 +3,8 @@ import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import Toast, { ToastMessage } from "./components/Toast";
 import AndroidMobileShell from "./components/AndroidMobileShell";
+import NetworkStatusHandler from "./components/NetworkStatusHandler";
+import ScreenProtectionHandler from "./components/ScreenProtectionHandler";
 
 // Pages
 import Home from "./pages/Home";
@@ -160,6 +162,12 @@ export default function App() {
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans selection:bg-blue-100 dark:selection:bg-blue-900 selection:text-blue-900 dark:selection:text-blue-100 transition-colors duration-200">
       {/* Toast Alert Core */}
       <Toast toasts={toasts} onClose={handleCloseToast} />
+
+      {/* Network Connectivity & Offline Popups */}
+      <NetworkStatusHandler showToast={showToast} />
+
+      {/* Anti-Screen Recording & Capture Protection */}
+      <ScreenProtectionHandler showToast={showToast} />
 
       {/* Android Mobile Shell Container */}
       <AndroidMobileShell
