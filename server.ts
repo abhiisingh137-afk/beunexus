@@ -116,11 +116,11 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const serverDb = getFirestore(firebaseApp, "ai-studio-6ed392ca-dab3-4677-b296-362ab4a0f8f3");
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+const app = express();
+app.use(express.json());
 
-  app.use(express.json());
+async function startServer() {
+  const PORT = 3000;
 
   // ==================== TELEGRAM WEBHOOK PIPELINE ENDPOINTS ====================
   
@@ -1003,3 +1003,5 @@ async function startServer() {
 }
 
 startServer();
+
+export default app;

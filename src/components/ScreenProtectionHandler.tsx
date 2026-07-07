@@ -10,15 +10,7 @@ export default function ScreenProtectionHandler({ showToast }: ScreenProtectionH
   const [isShielded, setIsShielded] = useState<boolean>(false);
 
   useEffect(() => {
-    // 1. Tab Focus / Document Visibility change listeners
-    const handleBlur = () => {
-      setIsShielded(true);
-    };
-
-    const handleFocus = () => {
-      setIsShielded(false);
-    };
-
+    // 1. Tab / Document Visibility change listener (Standard tab switching/minimizing)
     const handleVisibilityChange = () => {
       if (document.hidden) {
         setIsShielded(true);
@@ -32,11 +24,28 @@ export default function ScreenProtectionHandler({ showToast }: ScreenProtectionH
       }
     };
 
-    window.addEventListener("blur", handleBlur);
-    window.addEventListener("focus", handleFocus);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
-    // 2. Intercept Screen Capture / Print / Save hotkeys
+    // 2. Active Screen Recording / Sharing Interception
+    // Intercept navigator.mediaDevices.getDisplayMedia (the engine for browser-based recording, extensions, and sharing)
+    let originalGetDisplayMedia: any = null;
+    if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+      originalGetDisplayMedia = navigator.mediaDevices.getDisplayMedia;
+      navigator.mediaDevices.getDisplayMedia = async function (options) {
+        // Trigger the screen black-out shield immediately to corrupt any initial frames
+        setIsShielded(true);
+        showToast("Screen capture and recording are disabled for security reasons.", "error");
+        
+        // Auto-dismiss the black screen shield after a short defensive period (3 seconds)
+        setTimeout(() => {
+          setIsShielded(false);
+        }, 3000);
+
+        throw new Error("Screen sharing is strictly prohibited on this platform.");
+      };
+    }
+
+    // 3. Intercept Screen Capture / Print / Save hotkeys
     const handleKeyDown = (e: KeyboardEvent) => {
       // Intercept PrintScreen
       if (e.key === "PrintScreen" || e.keyCode === 44) {
@@ -45,7 +54,7 @@ export default function ScreenProtectionHandler({ showToast }: ScreenProtectionH
         
         // Temporarily flash screen shield as defense
         setIsShielded(true);
-        setTimeout(() => setIsShielded(false), 1000);
+        setTimeout(() => setIsShielded(false), 1500);
         return false;
       }
 
@@ -61,7 +70,7 @@ export default function ScreenProtectionHandler({ showToast }: ScreenProtectionH
 
     window.addEventListener("keydown", handleKeyDown, true);
 
-    // 3. Inject CSS to completely hide screen during print actions
+    // 4. Inject CSS to completely hide screen during print actions
     const styleEl = document.createElement("style");
     styleEl.innerHTML = `
       @media print {
@@ -87,7 +96,7 @@ export default function ScreenProtectionHandler({ showToast }: ScreenProtectionH
     `;
     document.head.appendChild(styleEl);
 
-    // 4. Overwrite Clipboard on Screen Print Event to disrupt screenshot buffers if captured
+    // 5. Overwrite Clipboard on Screen Print Event to disrupt screenshot buffers if captured
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.key === "PrintScreen" || e.keyCode === 44) {
         navigator.clipboard?.writeText?.("Protected content. Screenshots are prohibited.").catch(() => {});
@@ -96,13 +105,15 @@ export default function ScreenProtectionHandler({ showToast }: ScreenProtectionH
     window.addEventListener("keyup", handleKeyUp, true);
 
     return () => {
-      window.removeEventListener("blur", handleBlur);
-      window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("keydown", handleKeyDown, true);
       window.removeEventListener("keyup", handleKeyUp, true);
       if (document.head.contains(styleEl)) {
         document.head.removeChild(styleEl);
+      }
+      // Restore original getDisplayMedia on unmount
+      if (originalGetDisplayMedia && navigator.mediaDevices) {
+        navigator.mediaDevices.getDisplayMedia = originalGetDisplayMedia;
       }
     };
   }, [showToast]);
@@ -162,11 +173,11 @@ export default function ScreenProtectionHandler({ showToast }: ScreenProtectionH
                 Content is Securely Hidden
               </h2>
               <p className="mt-3 text-sm text-slate-400 leading-relaxed">
-                To prevent unauthorized screen recording or capture, the application interface is hidden while this browser tab is out of focus.
+                To prevent unauthorized screen recording or capture, the application interface is hidden while this browser tab is backgrounded or screen sharing/capture is active.
               </p>
               <p className="mt-6 text-xs text-slate-500 flex items-center gap-1">
                 <EyeOff className="h-3 w-3" />
-                <span>Return focus to this browser window to resume viewing.</span>
+                <span>Return to this active browser tab to resume viewing.</span>
               </p>
             </motion.div>
           </motion.div>
