@@ -130,31 +130,22 @@ async function startServer() {
         return res.json({ webhookRegistered: false });
       }
 
-      const url = `https://api.telegram.org/bot${botToken}/getWebhookInfo`;
-      https.get(url, (telRes) => {
-        let body = "";
-        telRes.on("data", (chunk) => body += chunk);
-        telRes.on("end", () => {
-          try {
-            const info = JSON.parse(body);
-            if (info.ok && info.result) {
-              res.json({
-                webhookRegistered: !!info.result.url,
-                url: info.result.url,
-                pendingUpdateCount: info.result.pending_update_count,
-                lastErrorMessage: info.result.last_error_message || null,
-                lastErrorDate: info.result.last_error_date || null
-              });
-            } else {
-              res.json({ webhookRegistered: false, error: "Invalid response from Telegram API" });
-            }
-          } catch (e) {
-            res.json({ webhookRegistered: false, error: "Failed to parse Telegram response" });
-          }
-        });
-      }).on("error", (err) => {
-        res.json({ webhookRegistered: false, error: err.message });
-      });
+      try {
+        const info = await callTelegram(botToken, "getWebhookInfo", {});
+        if (info.ok && info.result) {
+          res.json({
+            webhookRegistered: !!info.result.url,
+            url: info.result.url,
+            pendingUpdateCount: info.result.pending_update_count,
+            lastErrorMessage: info.result.last_error_message || null,
+            lastErrorDate: info.result.last_error_date || null
+          });
+        } else {
+          res.json({ webhookRegistered: false, error: info.description || "Invalid response from Telegram API" });
+        }
+      } catch (err: any) {
+        res.json({ webhookRegistered: false, error: "Telegram API check failed: " + err.message });
+      }
     } catch (error: any) {
       res.json({ webhookRegistered: false, error: error.message });
     }
@@ -211,34 +202,25 @@ async function startServer() {
       const webhookUrl = `${protocol}://${host}/api/telegram/webhook`;
       console.log("Setting Telegram webhook URL to:", webhookUrl);
 
-      const setWebhookUrl = `https://api.telegram.org/bot${botToken}/setWebhook?url=${encodeURIComponent(webhookUrl)}`;
-      
-      https.get(setWebhookUrl, (telRes) => {
-        let body = "";
-        telRes.on("data", (chunk) => body += chunk);
-        telRes.on("end", async () => {
-          try {
-            console.log("Telegram setWebhook API response:", body);
-            const result = JSON.parse(body);
-            if (result.ok) {
-              await setDoc(doc(serverDb, "settings", "telegram"), {
-                botToken,
-                channelId,
-                webhookUrl,
-                secretCode: "apnaBEU@admin2026",
-                updatedAt: new Date().toISOString()
-              });
-              res.json({ success: true, message: result.description });
-            } else {
-              res.status(400).json({ success: false, error: result.description });
-            }
-          } catch (e: any) {
-            res.status(500).json({ success: false, error: "Failed to parse setWebhook response: " + e.message });
-          }
-        });
-      }).on("error", (err) => {
+      try {
+        const result = await callTelegram(botToken, "setWebhook", { url: webhookUrl });
+        console.log("Telegram setWebhook API response:", result);
+        if (result.ok) {
+          await setDoc(doc(serverDb, "settings", "telegram"), {
+            botToken,
+            channelId,
+            webhookUrl,
+            secretCode: "apnaBEU@admin2026",
+            updatedAt: new Date().toISOString()
+          });
+          res.json({ success: true, message: result.description || "Webhook registered successfully" });
+        } else {
+          res.status(400).json({ success: false, error: result.description || "Failed to set up Telegram webhook connection" });
+        }
+      } catch (err: any) {
+        console.error("Webhook registration call error: ", err);
         res.status(500).json({ success: false, error: "Telegram API registration failed: " + err.message });
-      });
+      }
 
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
