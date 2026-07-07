@@ -172,34 +172,44 @@ async function startServer() {
         return res.status(401).json({ success: false, error: "Unauthorized: Invalid Admin Secret Code" });
       }
 
-      let protocol = (req.headers["x-forwarded-proto"] as string) || "https";
-      let host = (req.headers["x-forwarded-host"] as string) || req.headers.host || "";
+      // Force protocol to ALWAYS be https because Telegram webhook only accepts HTTPS
+      const protocol = "https";
+      let host = "";
 
-      // Fallback: Parse Referer header to get the real public origin
+      // 1. Try to extract host from the Referer header (most reliable as it comes directly from the admin's browser session)
       if (req.headers.referer) {
         try {
           const refUrl = new URL(req.headers.referer as string);
           if (refUrl.hostname && !refUrl.hostname.includes("localhost") && !refUrl.hostname.includes("127.0.0.1") && !refUrl.hostname.startsWith("0.0.0.0")) {
-            host = refUrl.host;
-            protocol = refUrl.protocol.replace(":", "");
+            host = refUrl.host; // This includes port if non-standard, but we will strip it below
           }
         } catch (e) {
           // ignore parsing error
         }
       }
 
-      // If still local/sandboxed, use the public shared app URL as fallback for Telegram webhook
-      if (!host || host.includes("localhost") || host.includes("127.0.0.1") || host.startsWith("0.0.0.0") || host.includes("3000")) {
-        host = "ais-pre-ydxy5mpstxonppjiauw2lm-387554138614.asia-southeast1.run.app";
-        protocol = "https";
+      // 2. Fallback to x-forwarded-host or standard host header
+      if (!host) {
+        host = (req.headers["x-forwarded-host"] as string) || req.headers.host || "";
       }
 
-      // Convert private development domain (ais-dev) to public shared preview domain (ais-pre) so Telegram can access it without login auth
+      // 3. Strip port if present (Telegram webhooks do not support non-standard ports like :3000)
+      if (host.includes(":")) {
+        host = host.split(":")[0];
+      }
+
+      // 4. Fallback if still local/sandboxed or blank
+      if (!host || host.includes("localhost") || host.includes("127.0.0.1") || host.startsWith("0.0.0.0") || host === "3000") {
+        host = "ais-pre-ydxy5mpstxonppjiauw2lm-387554138614.asia-southeast1.run.app";
+      }
+
+      // 5. Convert private development domain (ais-dev) to public shared preview domain (ais-pre) so Telegram can access it without login auth
       if (host.includes("ais-dev-")) {
         host = host.replace("ais-dev-", "ais-pre-");
       }
 
       const webhookUrl = `${protocol}://${host}/api/telegram/webhook`;
+      console.log("Setting Telegram webhook URL to:", webhookUrl);
 
       const setWebhookUrl = `https://api.telegram.org/bot${botToken}/setWebhook?url=${encodeURIComponent(webhookUrl)}`;
       
@@ -208,6 +218,7 @@ async function startServer() {
         telRes.on("data", (chunk) => body += chunk);
         telRes.on("end", async () => {
           try {
+            console.log("Telegram setWebhook API response:", body);
             const result = JSON.parse(body);
             if (result.ok) {
               await setDoc(doc(serverDb, "settings", "telegram"), {
@@ -236,23 +247,23 @@ async function startServer() {
 
   // Webhook Receiver: Handles all incoming student messages from Telegram
   app.post("/api/telegram/webhook", async (req, res) => {
-    res.status(200).send("OK"); // Return immediately to avoid re-deliveries
-
     try {
       const update = req.body;
       console.log("Incoming Telegram webhook update payload:", JSON.stringify(update));
-      if (!update) return;
+      if (!update) {
+        return res.status(200).send("OK");
+      }
 
       const message = update.message || update.edited_message;
       if (!message) {
         console.log("No message or edited_message found in the update payload.");
-        return;
+        return res.status(200).send("OK");
       }
 
       const chatId = message.chat?.id;
       if (!chatId) {
         console.log("No chat ID available in message payload.");
-        return;
+        return res.status(200).send("OK");
       }
 
       const messageId = message.message_id;
@@ -285,18 +296,18 @@ async function startServer() {
         } else {
           console.error("settings/telegram document does not exist in Firestore. Please configure it in the Admin Dashboard.");
         }
-        return;
+        return res.status(200).send("OK");
       }
 
       const configDoc = await getDoc(doc(serverDb, "settings", "telegram"));
       if (!configDoc.exists()) {
         console.error("Webhook triggered but settings/telegram is missing in Firestore.");
-        return;
+        return res.status(200).send("OK");
       }
       const { botToken, channelId } = configDoc.data();
       if (!botToken || !channelId) {
         console.error("Webhook missing token or channelId.");
-        return;
+        return res.status(200).send("OK");
       }
 
       let fileId = "";
@@ -373,8 +384,10 @@ async function startServer() {
       });
       console.log("Telegram upload confirmation sendMessage API response:", sendRes);
 
+      res.status(200).send("OK");
     } catch (err) {
       console.error("Webhook process exception: ", err);
+      res.status(200).send("OK"); // Avoid retries from Telegram even on error
     }
   });
 
