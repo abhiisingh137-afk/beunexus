@@ -2,7 +2,6 @@ import express from "express";
 import path from "path";
 import http from "http";
 import https from "https";
-import { createServer as createViteServer } from "vite";
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, getDoc, setDoc, collection, addDoc } from "firebase/firestore";
 
@@ -954,6 +953,7 @@ async function startServer() {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -967,39 +967,41 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", async () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
-    
-    // Auto-register webhook on startup
-    try {
-      console.log("[Auto-Webhook] Verification of Telegram Bot Webhook started on port listen...");
-      const configDoc = await getDoc(doc(serverDb, "settings", "telegram"));
-      if (configDoc.exists()) {
-        const { botToken, channelId } = configDoc.data();
-        if (botToken && channelId) {
-          const host = "ais-pre-ydxy5mpstxonppjiauw2lm-387554138614.asia-southeast1.run.app";
-          const webhookUrl = `https://${host}/api/telegram/webhook`;
-          console.log(`[Auto-Webhook] Found bot configurations. Automatically setting webhook to: ${webhookUrl}`);
-          const result = await callTelegram(botToken, "setWebhook", { url: webhookUrl });
-          console.log("[Auto-Webhook] Telegram setWebhook response:", result);
-          if (result.ok) {
-            await setDoc(doc(serverDb, "settings", "telegram"), {
-              botToken,
-              channelId,
-              webhookUrl,
-              secretCode: "apnaBEU@admin2026",
-              updatedAt: new Date().toISOString()
-            });
-            console.log("[Auto-Webhook] Registered successfully!");
-          } else {
-            console.error("[Auto-Webhook] Registration failed:", result.description);
+  if (!process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", async () => {
+      console.log(`Server running on http://0.0.0.0:${PORT}`);
+      
+      // Auto-register webhook on startup
+      try {
+        console.log("[Auto-Webhook] Verification of Telegram Bot Webhook started on port listen...");
+        const configDoc = await getDoc(doc(serverDb, "settings", "telegram"));
+        if (configDoc.exists()) {
+          const { botToken, channelId } = configDoc.data();
+          if (botToken && channelId) {
+            const host = "ais-pre-ydxy5mpstxonppjiauw2lm-387554138614.asia-southeast1.run.app";
+            const webhookUrl = `https://${host}/api/telegram/webhook`;
+            console.log(`[Auto-Webhook] Found bot configurations. Automatically setting webhook to: ${webhookUrl}`);
+            const result = await callTelegram(botToken, "setWebhook", { url: webhookUrl });
+            console.log("[Auto-Webhook] Telegram setWebhook response:", result);
+            if (result.ok) {
+              await setDoc(doc(serverDb, "settings", "telegram"), {
+                botToken,
+                channelId,
+                webhookUrl,
+                secretCode: "apnaBEU@admin2026",
+                updatedAt: new Date().toISOString()
+              });
+              console.log("[Auto-Webhook] Registered successfully!");
+            } else {
+              console.error("[Auto-Webhook] Registration failed:", result.description);
+            }
           }
         }
+      } catch (e: any) {
+        console.error("[Auto-Webhook] Critical exception:", e.message);
       }
-    } catch (e: any) {
-      console.error("[Auto-Webhook] Critical exception:", e.message);
-    }
-  });
+    });
+  }
 }
 
 startServer();
