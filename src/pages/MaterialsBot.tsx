@@ -17,7 +17,8 @@ import {
   Plus,
   Lock,
   Share2,
-  ListFilter
+  ListFilter,
+  Save
 } from "lucide-react";
 import { db } from "../firebase";
 import { collection, getDocs, doc, getDoc, setDoc } from "firebase/firestore";
@@ -474,10 +475,10 @@ export default function MaterialsBot() {
           {/* Settings configuration form */}
           <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8">
             <h3 className="text-xl font-extrabold text-slate-900 dark:text-white mb-1">
-              Configure Webhook Pipeline
+              Configure Bot Credentials
             </h3>
             <p className="text-xs text-slate-400 font-medium mb-6">
-              Connect your Telegram Bot and channel. This registers the server webhook on Telegram so files are instantly forwarded.
+              Connect your Telegram Bot and channel. The webhook is automatically bound, verified, and maintained by our servers. No manual action is required.
             </p>
 
             {configError && (
@@ -561,9 +562,9 @@ export default function MaterialsBot() {
                 {configLoading ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
                 ) : (
-                  <Bot className="w-4 h-4" />
+                  <Save className="w-4 h-4" />
                 )}
-                Register & Bind Webhook
+                Save Bot Credentials
               </button>
             </form>
 
@@ -618,7 +619,7 @@ export default function MaterialsBot() {
                 </li>
                 <li className="flex gap-2.5">
                   <span className="flex items-center justify-center bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 rounded-full w-5 h-5 shrink-0 font-bold">3</span>
-                  <span>Obtain your Channel ID (you've copied this!). Paste both credentials into the form on the left, and click <strong>Register & Bind Webhook</strong>.</span>
+                  <span>Obtain your Channel ID (you've copied this!). Paste both credentials into the form on the left, and click <strong>Save Bot Credentials</strong>. The webhook binds automatically.</span>
                 </li>
                 <li className="flex gap-2.5">
                   <span className="flex items-center justify-center bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 rounded-full w-5 h-5 shrink-0 font-bold">4</span>

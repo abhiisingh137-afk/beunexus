@@ -125,7 +125,7 @@ async function startServer() {
       if (!configDoc.exists()) {
         return res.json({ webhookRegistered: false });
       }
-      const { botToken } = configDoc.data();
+      const { botToken, channelId } = configDoc.data();
       if (!botToken) {
         return res.json({ webhookRegistered: false });
       }
@@ -133,8 +133,39 @@ async function startServer() {
       try {
         const info = await callTelegram(botToken, "getWebhookInfo", {});
         if (info.ok && info.result) {
+          const registered = !!info.result.url;
+          const host = "ais-pre-ydxy5mpstxonppjiauw2lm-387554138614.asia-southeast1.run.app";
+          const expectedWebhookUrl = `https://${host}/api/telegram/webhook`;
+
+          // Auto-repair webhook registration if it's missing or incorrect
+          if (!registered || info.result.url !== expectedWebhookUrl) {
+            console.log("[Auto-Repair] Webhook is missing or incorrect. Repairing in progress...");
+            const repairResult = await callTelegram(botToken, "setWebhook", { url: expectedWebhookUrl });
+            console.log("[Auto-Repair] Telegram setWebhook response:", repairResult);
+            if (repairResult.ok) {
+              await setDoc(doc(serverDb, "settings", "telegram"), {
+                botToken,
+                channelId,
+                webhookUrl: expectedWebhookUrl,
+                secretCode: "apnaBEU@admin2026",
+                updatedAt: new Date().toISOString()
+              });
+              const freshInfo = await callTelegram(botToken, "getWebhookInfo", {});
+              if (freshInfo.ok && freshInfo.result) {
+                return res.json({
+                  webhookRegistered: !!freshInfo.result.url,
+                  url: freshInfo.result.url,
+                  pendingUpdateCount: freshInfo.result.pending_update_count,
+                  lastErrorMessage: freshInfo.result.last_error_message || null,
+                  lastErrorDate: freshInfo.result.last_error_date || null,
+                  repaired: true
+                });
+              }
+            }
+          }
+
           res.json({
-            webhookRegistered: !!info.result.url,
+            webhookRegistered: registered,
             url: info.result.url,
             pendingUpdateCount: info.result.pending_update_count,
             lastErrorMessage: info.result.last_error_message || null,
@@ -930,8 +961,38 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  app.listen(PORT, "0.0.0.0", async () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
+    
+    // Auto-register webhook on startup
+    try {
+      console.log("[Auto-Webhook] Verification of Telegram Bot Webhook started on port listen...");
+      const configDoc = await getDoc(doc(serverDb, "settings", "telegram"));
+      if (configDoc.exists()) {
+        const { botToken, channelId } = configDoc.data();
+        if (botToken && channelId) {
+          const host = "ais-pre-ydxy5mpstxonppjiauw2lm-387554138614.asia-southeast1.run.app";
+          const webhookUrl = `https://${host}/api/telegram/webhook`;
+          console.log(`[Auto-Webhook] Found bot configurations. Automatically setting webhook to: ${webhookUrl}`);
+          const result = await callTelegram(botToken, "setWebhook", { url: webhookUrl });
+          console.log("[Auto-Webhook] Telegram setWebhook response:", result);
+          if (result.ok) {
+            await setDoc(doc(serverDb, "settings", "telegram"), {
+              botToken,
+              channelId,
+              webhookUrl,
+              secretCode: "apnaBEU@admin2026",
+              updatedAt: new Date().toISOString()
+            });
+            console.log("[Auto-Webhook] Registered successfully!");
+          } else {
+            console.error("[Auto-Webhook] Registration failed:", result.description);
+          }
+        }
+      }
+    } catch (e: any) {
+      console.error("[Auto-Webhook] Critical exception:", e.message);
+    }
   });
 }
 
