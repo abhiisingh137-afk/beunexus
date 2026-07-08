@@ -123,43 +123,25 @@ const DEFAULT_WEBHOOK_URL = `https://${WEBHOOK_HOST}/api/telegram/webhook`;
 async function getOrSeedTelegramConfig() {
   try {
     const configDocRef = doc(serverDb, "settings", "telegram");
-    const configDoc = await getDoc(configDocRef);
-    if (configDoc.exists()) {
-      const data = configDoc.data();
-      const botToken = data.botToken || DEFAULT_BOT_TOKEN;
-      const channelId = data.channelId || DEFAULT_CHANNEL_ID;
-      const webhookUrl = data.webhookUrl || DEFAULT_WEBHOOK_URL;
-      
-      // If some field was missing, let's update it in Firestore
-      if (!data.botToken || !data.channelId || !data.webhookUrl) {
-        await setDoc(configDocRef, {
-          botToken,
-          channelId,
-          webhookUrl,
-          secretCode: "apnaBEU@admin2026",
-          updatedAt: new Date().toISOString()
-        }, { merge: true });
-      }
-      return { botToken, channelId, webhookUrl };
-    } else {
-      // Seed the default config in Firestore
-      console.log("[Auto-Seed] Seeding settings/telegram with default credentials...");
-      const seededConfig = {
-        botToken: DEFAULT_BOT_TOKEN,
-        channelId: DEFAULT_CHANNEL_ID,
-        webhookUrl: DEFAULT_WEBHOOK_URL,
-        secretCode: "apnaBEU@admin2026",
-        updatedAt: new Date().toISOString()
-      };
-      await setDoc(configDocRef, seededConfig);
-      return {
-        botToken: DEFAULT_BOT_TOKEN,
-        channelId: DEFAULT_CHANNEL_ID,
-        webhookUrl: DEFAULT_WEBHOOK_URL
-      };
-    }
+    
+    // Always overwrite with the current correct/valid default config on boot to keep it completely functional
+    const activeConfig = {
+      botToken: DEFAULT_BOT_TOKEN,
+      channelId: DEFAULT_CHANNEL_ID,
+      webhookUrl: DEFAULT_WEBHOOK_URL,
+      secretCode: "apnaBEU@admin2026",
+      updatedAt: new Date().toISOString()
+    };
+    
+    await setDoc(configDocRef, activeConfig);
+    console.log("[Auto-Seed] Successfully set/updated settings/telegram to active credentials:", DEFAULT_BOT_TOKEN.substring(0, 8) + "...");
+    return {
+      botToken: DEFAULT_BOT_TOKEN,
+      channelId: DEFAULT_CHANNEL_ID,
+      webhookUrl: DEFAULT_WEBHOOK_URL
+    };
   } catch (error) {
-    console.error("[getOrSeedTelegramConfig] Error reading/seeding config:", error);
+    console.error("[getOrSeedTelegramConfig] Error seeding active config:", error);
     return {
       botToken: DEFAULT_BOT_TOKEN,
       channelId: DEFAULT_CHANNEL_ID,
