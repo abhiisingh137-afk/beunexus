@@ -115,6 +115,59 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const serverDb = getFirestore(firebaseApp, "ai-studio-6ed392ca-dab3-4677-b296-362ab4a0f8f3");
 
+const DEFAULT_BOT_TOKEN = "8876998350:AAGIJk0Cb7pX5dPGqeqdyzhx1Qv2hy6pZSM";
+const DEFAULT_CHANNEL_ID = "-1003994463295";
+const WEBHOOK_HOST = "ais-pre-ydxy5mpstxonppjiauw2lm-387554138614.asia-southeast1.run.app";
+const DEFAULT_WEBHOOK_URL = `https://${WEBHOOK_HOST}/api/telegram/webhook`;
+
+async function getOrSeedTelegramConfig() {
+  try {
+    const configDocRef = doc(serverDb, "settings", "telegram");
+    const configDoc = await getDoc(configDocRef);
+    if (configDoc.exists()) {
+      const data = configDoc.data();
+      const botToken = data.botToken || DEFAULT_BOT_TOKEN;
+      const channelId = data.channelId || DEFAULT_CHANNEL_ID;
+      const webhookUrl = data.webhookUrl || DEFAULT_WEBHOOK_URL;
+      
+      // If some field was missing, let's update it in Firestore
+      if (!data.botToken || !data.channelId || !data.webhookUrl) {
+        await setDoc(configDocRef, {
+          botToken,
+          channelId,
+          webhookUrl,
+          secretCode: "apnaBEU@admin2026",
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      }
+      return { botToken, channelId, webhookUrl };
+    } else {
+      // Seed the default config in Firestore
+      console.log("[Auto-Seed] Seeding settings/telegram with default credentials...");
+      const seededConfig = {
+        botToken: DEFAULT_BOT_TOKEN,
+        channelId: DEFAULT_CHANNEL_ID,
+        webhookUrl: DEFAULT_WEBHOOK_URL,
+        secretCode: "apnaBEU@admin2026",
+        updatedAt: new Date().toISOString()
+      };
+      await setDoc(configDocRef, seededConfig);
+      return {
+        botToken: DEFAULT_BOT_TOKEN,
+        channelId: DEFAULT_CHANNEL_ID,
+        webhookUrl: DEFAULT_WEBHOOK_URL
+      };
+    }
+  } catch (error) {
+    console.error("[getOrSeedTelegramConfig] Error reading/seeding config:", error);
+    return {
+      botToken: DEFAULT_BOT_TOKEN,
+      channelId: DEFAULT_CHANNEL_ID,
+      webhookUrl: DEFAULT_WEBHOOK_URL
+    };
+  }
+}
+
 const app = express();
 app.use(express.json());
 
@@ -126,21 +179,13 @@ async function startServer() {
   // Endpoint to query current webhook setup details and API queue status
   app.get("/api/telegram/status", async (req, res) => {
     try {
-      const configDoc = await getDoc(doc(serverDb, "settings", "telegram"));
-      if (!configDoc.exists()) {
-        return res.json({ webhookRegistered: false });
-      }
-      const { botToken, channelId } = configDoc.data();
-      if (!botToken) {
-        return res.json({ webhookRegistered: false });
-      }
+      const { botToken, channelId, webhookUrl } = await getOrSeedTelegramConfig();
 
       try {
         const info = await callTelegram(botToken, "getWebhookInfo", {});
         if (info.ok && info.result) {
           const registered = !!info.result.url;
-          const host = "ais-pre-ydxy5mpstxonppjiauw2lm-387554138614.asia-southeast1.run.app";
-          const expectedWebhookUrl = `https://${host}/api/telegram/webhook`;
+          const expectedWebhookUrl = webhookUrl;
 
           // Auto-repair webhook registration if it's missing or incorrect
           if (!registered || info.result.url !== expectedWebhookUrl) {
@@ -154,7 +199,8 @@ async function startServer() {
                 webhookUrl: expectedWebhookUrl,
                 secretCode: "apnaBEU@admin2026",
                 updatedAt: new Date().toISOString()
-              });
+              }, { merge: true });
+              
               const freshInfo = await callTelegram(botToken, "getWebhookInfo", {});
               if (freshInfo.ok && freshInfo.result) {
                 return res.json({
@@ -289,6 +335,9 @@ async function startServer() {
       const photo = message.photo;
       const caption = message.caption || "";
 
+      // Load config dynamically with fallback auto-seeding
+      const { botToken, channelId } = await getOrSeedTelegramConfig();
+
       if (!document && !photo) {
         const isStart = message.text && message.text.startsWith("/start");
         
@@ -298,33 +347,21 @@ async function startServer() {
           ? welcomeText 
           : `ℹ️ <b>To upload study materials to Apnabeu correctly:</b>\n\n1️⃣ Attach a document (PDF, DOCX, ZIP) or an image/photo.\n2️⃣ In the caption, specify the <b>Branch</b> (e.g., CSE, ECE, ME), <b>Semester</b> (e.g., 3rd Sem), and <b>Subject</b>.\n\n📝 <b>Example caption:</b>\n<i>"CSE 3rd Sem - Data Structures Notes by Rahul"</i>`;
         
-        const configDoc = await getDoc(doc(serverDb, "settings", "telegram"));
-        if (configDoc.exists()) {
-          const { botToken } = configDoc.data();
-          if (botToken) {
-            const sendRes = await callTelegram(botToken, "sendMessage", { 
-              chat_id: chatId, 
-              text: responseText,
-              parse_mode: "HTML"
-            });
-            console.log("Telegram welcome/guide sendMessage API response:", sendRes);
-          } else {
-            console.error("Bot token is blank in settings/telegram Firestore document.");
-          }
+        if (botToken) {
+          const sendRes = await callTelegram(botToken, "sendMessage", { 
+            chat_id: chatId, 
+            text: responseText,
+            parse_mode: "HTML"
+          });
+          console.log("Telegram welcome/guide sendMessage API response:", sendRes);
         } else {
-          console.error("settings/telegram document does not exist in Firestore. Please configure it in the Admin Dashboard.");
+          console.error("Bot token is blank.");
         }
         return res.status(200).send("OK");
       }
 
-      const configDoc = await getDoc(doc(serverDb, "settings", "telegram"));
-      if (!configDoc.exists()) {
-        console.error("Webhook triggered but settings/telegram is missing in Firestore.");
-        return res.status(200).send("OK");
-      }
-      const { botToken, channelId } = configDoc.data();
       if (!botToken || !channelId) {
-        console.error("Webhook missing token or channelId.");
+        console.error("Webhook missing token or channelId configuration.");
         return res.status(200).send("OK");
       }
 
@@ -415,11 +452,7 @@ async function startServer() {
       const { file_id } = req.params;
       if (!file_id) return res.status(400).send("File ID required");
 
-      const configDoc = await getDoc(doc(serverDb, "settings", "telegram"));
-      if (!configDoc.exists()) {
-        return res.status(500).send("Bot credentials not found");
-      }
-      const { botToken } = configDoc.data();
+      const { botToken } = await getOrSeedTelegramConfig();
       if (!botToken) {
         return res.status(500).send("Bot credentials are blank");
       }
@@ -974,27 +1007,15 @@ async function startServer() {
       // Auto-register webhook on startup
       try {
         console.log("[Auto-Webhook] Verification of Telegram Bot Webhook started on port listen...");
-        const configDoc = await getDoc(doc(serverDb, "settings", "telegram"));
-        if (configDoc.exists()) {
-          const { botToken, channelId } = configDoc.data();
-          if (botToken && channelId) {
-            const host = "ais-pre-ydxy5mpstxonppjiauw2lm-387554138614.asia-southeast1.run.app";
-            const webhookUrl = `https://${host}/api/telegram/webhook`;
-            console.log(`[Auto-Webhook] Found bot configurations. Automatically setting webhook to: ${webhookUrl}`);
-            const result = await callTelegram(botToken, "setWebhook", { url: webhookUrl });
-            console.log("[Auto-Webhook] Telegram setWebhook response:", result);
-            if (result.ok) {
-              await setDoc(doc(serverDb, "settings", "telegram"), {
-                botToken,
-                channelId,
-                webhookUrl,
-                secretCode: "apnaBEU@admin2026",
-                updatedAt: new Date().toISOString()
-              });
-              console.log("[Auto-Webhook] Registered successfully!");
-            } else {
-              console.error("[Auto-Webhook] Registration failed:", result.description);
-            }
+        const { botToken, channelId, webhookUrl } = await getOrSeedTelegramConfig();
+        if (botToken && channelId) {
+          console.log(`[Auto-Webhook] Found bot configurations. Automatically setting webhook to: ${webhookUrl}`);
+          const result = await callTelegram(botToken, "setWebhook", { url: webhookUrl });
+          console.log("[Auto-Webhook] Telegram setWebhook response:", result);
+          if (result.ok) {
+            console.log("[Auto-Webhook] Registered successfully!");
+          } else {
+            console.error("[Auto-Webhook] Registration failed:", result.description);
           }
         }
       } catch (e: any) {
