@@ -150,6 +150,170 @@ async function getOrSeedTelegramConfig() {
   }
 }
 
+let pollingActive = false;
+let lastUpdateId = 0;
+
+async function processTelegramUpdate(update: any): Promise<void> {
+  const message = update.message || update.edited_message;
+  if (!message) {
+    console.log("No message or edited_message found in the update payload.");
+    return;
+  }
+
+  const chatId = message.chat?.id;
+  if (!chatId) {
+    console.log("No chat ID available in message payload.");
+    return;
+  }
+
+  const messageId = message.message_id;
+  const document = message.document;
+  const photo = message.photo;
+  const caption = message.caption || "";
+
+  // Load config dynamically with fallback auto-seeding
+  const { botToken, channelId } = await getOrSeedTelegramConfig();
+
+  if (!document && !photo) {
+    const isStart = message.text && message.text.startsWith("/start");
+    
+    const welcomeText = `👋 <b>Welcome to the NexusBEU Student Materials Bot!</b> 🚀\n\nI will help you instantly upload and list your study materials (such as hand-written notes, syllabus, reference books, past year papers (PYQs), or college sheets) on our website directory!\n\n--------------------------------------------\n\n📥 <b>HOW TO UPLOAD MATERIALS THE RIGHT WAY:</b>\n\n1️⃣ <b>Attach your file:</b>\n   • Send any document (PDF, DOCX, ZIP) or a high-quality photo/image directly to me.\n   \n2️⃣ <b>Include details in the CAPTION (CRITICAL):</b>\n   • You must specify the <b>Branch</b> (e.g., CSE, ECE, ME, CE, EE, IT) and <b>Semester</b> (1st to 8th) in the caption text of the file before hitting send.\n   • Add the subject name and details so other students can find it easily!\n\n--------------------------------------------\n\n📝 <b>CAPTION FORMAT EXAMPLES:</b>\n\n✅ <i>"CSE 5th Sem - Compiler Design unit 3 notes by Neha"</i>\n✅ <i>"ECE 3rd Semester - Network Theory PYQs 2024"</i>\n✅ <i>"ME 4th Sem - Fluid Mechanics handbook"</i>\n\n--------------------------------------------\n\n💡 <b>WHAT HAPPENS NEXT?</b>\n• Once you send the file, our bot automatically extracts the branch and semester from your caption.\n• The file is safely logged in our official repository and published instantly on our website under <b>"Bot Uploads"</b> for everyone to download!\n\nLet's keep the peer contribution growing! Thank you for supporting your fellow students! 🌟`;
+    
+    const responseText = isStart 
+      ? welcomeText 
+      : `ℹ️ <b>To upload study materials to NexusBEU correctly:</b>\n\n1️⃣ Attach a document (PDF, DOCX, ZIP) or an image/photo.\n2️⃣ In the caption, specify the <b>Branch</b> (e.g., CSE, ECE, ME), <b>Semester</b> (e.g., 3rd Sem), and <b>Subject</b>.\n\n📝 <b>Example caption:</b>\n<i>"CSE 3rd Sem - Data Structures Notes by Rahul"</i>`;
+    
+    if (botToken) {
+      const sendRes = await callTelegram(botToken, "sendMessage", { 
+        chat_id: chatId, 
+        text: responseText,
+        parse_mode: "HTML"
+      });
+      console.log("Telegram welcome/guide sendMessage API response:", sendRes);
+    } else {
+      console.error("Bot token is blank.");
+    }
+    return;
+  }
+
+  if (!botToken || !channelId) {
+    console.error("Webhook/Polling missing token or channelId configuration.");
+    return;
+  }
+
+  let fileId = "";
+  let fileName = "";
+  let fileSize = 0;
+  let mimeType = "";
+
+  if (document) {
+    fileId = document.file_id;
+    fileName = document.file_name || "Document.pdf";
+    fileSize = document.file_size || 0;
+    mimeType = document.mime_type || "application/pdf";
+  } else if (photo && photo.length > 0) {
+    const largestPhoto = photo[photo.length - 1];
+    fileId = largestPhoto.file_id;
+    fileName = `Photo_${Date.now()}.jpg`;
+    fileSize = largestPhoto.file_size || 0;
+    mimeType = "image/jpeg";
+  }
+
+  let branch = "CSE";
+  let semester = 3;
+
+  const upperCaption = caption.toUpperCase();
+  const branchMatches = upperCaption.match(/\b(CSE|ECE|ME|CE|EE|IT|CS)\b/);
+  if (branchMatches) {
+    branch = branchMatches[0] === "CS" ? "CSE" : branchMatches[0];
+  }
+
+  const semMatches = upperCaption.match(/\b([1-8])(?:ST|ND|RD|TH)?\s*(?:SEM|SEMESTER)?\b/i);
+  if (semMatches) {
+    semester = parseInt(semMatches[1]);
+  }
+
+  const uploaderName = [message.from?.first_name, message.from?.last_name].filter(Boolean).join(" ") || "Student Contributor";
+  const uploaderUsername = message.from?.username || "";
+
+  // 1. Forward to the target channel
+  const forwardRes = await callTelegram(botToken, "forwardMessage", {
+    chat_id: channelId,
+    from_chat_id: chatId,
+    message_id: messageId
+  });
+
+  let channelPostId: number | undefined;
+  if (forwardRes.ok && forwardRes.result) {
+    channelPostId = forwardRes.result.message_id;
+  }
+
+  // 2. Save material metadata to Firestore
+  await addDoc(collection(serverDb, "telegram_materials"), {
+    fileName,
+    fileSize,
+    mimeType,
+    fileId,
+    caption,
+    uploaderName,
+    uploaderUsername,
+    channelPostId,
+    branch,
+    semester,
+    secretCode: "apnaBEU@admin2026",
+    createdAt: new Date().toISOString()
+  });
+
+  // 3. Confirm to uploader
+  const safeFileName = escapeHtml(fileName);
+  const successText = `🎉 <b>Success!</b> Your study material <b>"${safeFileName}"</b> has been received, stored in our database, and forwarded to our official private channel.\n\nThank you for contributing! Your upload will appear live on our website under "Bot Uploads". 🚀`;
+  
+  const sendRes = await callTelegram(botToken, "sendMessage", {
+    chat_id: chatId,
+    text: successText,
+    parse_mode: "HTML"
+  });
+  console.log("Telegram upload confirmation sendMessage API response:", sendRes);
+}
+
+async function startPolling(token: string) {
+  if (pollingActive) return;
+  pollingActive = true;
+  console.log("[Polling] Starting background long polling loop...");
+  
+  while (pollingActive) {
+    try {
+      const response = await callTelegram(token, "getUpdates", {
+        offset: lastUpdateId + 1,
+        timeout: 10,
+        allowed_updates: ["message"]
+      });
+      
+      if (response && response.ok && Array.isArray(response.result)) {
+        for (const update of response.result) {
+          lastUpdateId = update.update_id;
+          console.log("[Polling] Processing update ID:", update.update_id);
+          try {
+            await processTelegramUpdate(update);
+          } catch (err: any) {
+            console.error("[Polling] Error processing update:", err.message);
+          }
+        }
+      } else {
+        if (response && response.error_code === 409) {
+          console.log("[Polling] Conflict (webhook active). Retrying in 10s...");
+          await new Promise(resolve => setTimeout(resolve, 10000));
+        } else {
+          await new Promise(resolve => setTimeout(resolve, 3000));
+        }
+      }
+    } catch (error: any) {
+      console.error("[Polling] Polling loop request exception:", error.message);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+  }
+}
+
 const app = express();
 app.use(express.json());
 
@@ -162,6 +326,7 @@ async function startServer() {
   app.get("/api/telegram/status", async (req, res) => {
     try {
       const { botToken, channelId, webhookUrl } = await getOrSeedTelegramConfig();
+      const isDev = process.env.NODE_ENV !== "production";
 
       try {
         const info = await callTelegram(botToken, "getWebhookInfo", {});
@@ -169,9 +334,9 @@ async function startServer() {
           const registered = !!info.result.url;
           const expectedWebhookUrl = webhookUrl;
 
-          // Auto-repair webhook registration if it's missing or incorrect
-          if (!registered || info.result.url !== expectedWebhookUrl) {
-            console.log("[Auto-Repair] Webhook is missing or incorrect. Repairing in progress...");
+          // Only auto-repair webhook registration in production if it is missing or incorrect
+          if (!isDev && (!registered || info.result.url !== expectedWebhookUrl)) {
+            console.log("[Auto-Repair] Webhook is missing or incorrect in production. Repairing in progress...");
             const repairResult = await callTelegram(botToken, "setWebhook", { url: expectedWebhookUrl });
             console.log("[Auto-Repair] Telegram setWebhook response:", repairResult);
             if (repairResult.ok) {
@@ -186,8 +351,9 @@ async function startServer() {
               const freshInfo = await callTelegram(botToken, "getWebhookInfo", {});
               if (freshInfo.ok && freshInfo.result) {
                 return res.json({
-                  webhookRegistered: !!freshInfo.result.url,
-                  url: freshInfo.result.url,
+                  webhookRegistered: !!freshInfo.result.url || pollingActive,
+                  isPolling: pollingActive,
+                  url: freshInfo.result.url || "Polling Fallback Active",
                   pendingUpdateCount: freshInfo.result.pending_update_count,
                   lastErrorMessage: freshInfo.result.last_error_message || null,
                   lastErrorDate: freshInfo.result.last_error_date || null,
@@ -198,20 +364,37 @@ async function startServer() {
           }
 
           res.json({
-            webhookRegistered: registered,
-            url: info.result.url,
+            webhookRegistered: registered || pollingActive,
+            isPolling: pollingActive,
+            url: info.result.url || "Polling Fallback Active",
             pendingUpdateCount: info.result.pending_update_count,
             lastErrorMessage: info.result.last_error_message || null,
             lastErrorDate: info.result.last_error_date || null
           });
         } else {
-          res.json({ webhookRegistered: false, error: info.description || "Invalid response from Telegram API" });
+          res.json({
+            webhookRegistered: pollingActive,
+            isPolling: pollingActive,
+            url: "Polling Fallback Active",
+            pendingUpdateCount: 0,
+            error: info.description || "Invalid response from Telegram API"
+          });
         }
       } catch (err: any) {
-        res.json({ webhookRegistered: false, error: "Telegram API check failed: " + err.message });
+        res.json({
+          webhookRegistered: pollingActive,
+          isPolling: pollingActive,
+          url: "Polling Fallback Active",
+          pendingUpdateCount: 0,
+          error: "Telegram API check failed: " + err.message
+        });
       }
     } catch (error: any) {
-      res.json({ webhookRegistered: false, error: error.message });
+      res.json({
+        webhookRegistered: pollingActive,
+        isPolling: pollingActive,
+        error: error.message
+      });
     }
   });
 
@@ -296,131 +479,9 @@ async function startServer() {
     try {
       const update = req.body;
       console.log("Incoming Telegram webhook update payload:", JSON.stringify(update));
-      if (!update) {
-        return res.status(200).send("OK");
+      if (update) {
+        await processTelegramUpdate(update);
       }
-
-      const message = update.message || update.edited_message;
-      if (!message) {
-        console.log("No message or edited_message found in the update payload.");
-        return res.status(200).send("OK");
-      }
-
-      const chatId = message.chat?.id;
-      if (!chatId) {
-        console.log("No chat ID available in message payload.");
-        return res.status(200).send("OK");
-      }
-
-      const messageId = message.message_id;
-      const document = message.document;
-      const photo = message.photo;
-      const caption = message.caption || "";
-
-      // Load config dynamically with fallback auto-seeding
-      const { botToken, channelId } = await getOrSeedTelegramConfig();
-
-      if (!document && !photo) {
-        const isStart = message.text && message.text.startsWith("/start");
-        
-        const welcomeText = `👋 <b>Welcome to the Apnabeu Student Materials Bot!</b> 🚀\n\nI will help you instantly upload and list your study materials (such as hand-written notes, syllabus, reference books, past year papers (PYQs), or college sheets) on our website directory!\n\n--------------------------------------------\n\n📥 <b>HOW TO UPLOAD MATERIALS THE RIGHT WAY:</b>\n\n1️⃣ <b>Attach your file:</b>\n   • Send any document (PDF, DOCX, ZIP) or a high-quality photo/image directly to me.\n   \n2️⃣ <b>Include details in the CAPTION (CRITICAL):</b>\n   • You must specify the <b>Branch</b> (e.g., CSE, ECE, ME, CE, EE, IT) and <b>Semester</b> (1st to 8th) in the caption text of the file before hitting send.\n   • Add the subject name and details so other students can find it easily!\n\n--------------------------------------------\n\n📝 <b>CAPTION FORMAT EXAMPLES:</b>\n\n✅ <i>"CSE 5th Sem - Compiler Design unit 3 notes by Neha"</i>\n✅ <i>"ECE 3rd Semester - Network Theory PYQs 2024"</i>\n✅ <i>"ME 4th Sem - Fluid Mechanics handbook"</i>\n\n--------------------------------------------\n\n💡 <b>WHAT HAPPENS NEXT?</b>\n• Once you send the file, our bot automatically extracts the branch and semester from your caption.\n• The file is safely logged in our official repository and published instantly on our website under <b>"Bot Uploads"</b> for everyone to download!\n\nLet's keep the peer contribution growing! Thank you for supporting your fellow students! 🌟`;
-        
-        const responseText = isStart 
-          ? welcomeText 
-          : `ℹ️ <b>To upload study materials to Apnabeu correctly:</b>\n\n1️⃣ Attach a document (PDF, DOCX, ZIP) or an image/photo.\n2️⃣ In the caption, specify the <b>Branch</b> (e.g., CSE, ECE, ME), <b>Semester</b> (e.g., 3rd Sem), and <b>Subject</b>.\n\n📝 <b>Example caption:</b>\n<i>"CSE 3rd Sem - Data Structures Notes by Rahul"</i>`;
-        
-        if (botToken) {
-          const sendRes = await callTelegram(botToken, "sendMessage", { 
-            chat_id: chatId, 
-            text: responseText,
-            parse_mode: "HTML"
-          });
-          console.log("Telegram welcome/guide sendMessage API response:", sendRes);
-        } else {
-          console.error("Bot token is blank.");
-        }
-        return res.status(200).send("OK");
-      }
-
-      if (!botToken || !channelId) {
-        console.error("Webhook missing token or channelId configuration.");
-        return res.status(200).send("OK");
-      }
-
-      let fileId = "";
-      let fileName = "";
-      let fileSize = 0;
-      let mimeType = "";
-
-      if (document) {
-        fileId = document.file_id;
-        fileName = document.file_name || "Document.pdf";
-        fileSize = document.file_size || 0;
-        mimeType = document.mime_type || "application/pdf";
-      } else if (photo && photo.length > 0) {
-        const largestPhoto = photo[photo.length - 1];
-        fileId = largestPhoto.file_id;
-        fileName = `Photo_${Date.now()}.jpg`;
-        fileSize = largestPhoto.file_size || 0;
-        mimeType = "image/jpeg";
-      }
-
-      let branch = "CSE";
-      let semester = 3;
-
-      const upperCaption = caption.toUpperCase();
-      const branchMatches = upperCaption.match(/\b(CSE|ECE|ME|CE|EE|IT|CS)\b/);
-      if (branchMatches) {
-        branch = branchMatches[0] === "CS" ? "CSE" : branchMatches[0];
-      }
-
-      const semMatches = upperCaption.match(/\b([1-8])(?:ST|ND|RD|TH)?\s*(?:SEM|SEMESTER)?\b/i);
-      if (semMatches) {
-        semester = parseInt(semMatches[1]);
-      }
-
-      const uploaderName = [message.from?.first_name, message.from?.last_name].filter(Boolean).join(" ") || "Student Contributor";
-      const uploaderUsername = message.from?.username || "";
-
-      // 1. Forward to the target channel
-      const forwardRes = await callTelegram(botToken, "forwardMessage", {
-        chat_id: channelId,
-        from_chat_id: chatId,
-        message_id: messageId
-      });
-
-      let channelPostId: number | undefined;
-      if (forwardRes.ok && forwardRes.result) {
-        channelPostId = forwardRes.result.message_id;
-      }
-
-      // 2. Save material metadata to Firestore
-      await addDoc(collection(serverDb, "telegram_materials"), {
-        fileName,
-        fileSize,
-        mimeType,
-        fileId,
-        caption,
-        uploaderName,
-        uploaderUsername,
-        channelPostId,
-        branch,
-        semester,
-        secretCode: "apnaBEU@admin2026",
-        createdAt: new Date().toISOString()
-      });
-
-      // 3. Confirm to uploader
-      const safeFileName = escapeHtml(fileName);
-      const successText = `🎉 <b>Success!</b> Your study material <b>"${safeFileName}"</b> has been received, stored in our database, and forwarded to our official private channel.\n\nThank you for contributing! Your upload will appear live on our website under "Bot Uploads". 🚀`;
-      
-      const sendRes = await callTelegram(botToken, "sendMessage", {
-        chat_id: chatId,
-        text: successText,
-        parse_mode: "HTML"
-      });
-      console.log("Telegram upload confirmation sendMessage API response:", sendRes);
-
       res.status(200).send("OK");
     } catch (err) {
       console.error("Webhook process exception: ", err);
@@ -986,22 +1047,33 @@ async function startServer() {
     app.listen(PORT, "0.0.0.0", async () => {
       console.log(`Server running on http://0.0.0.0:${PORT}`);
       
-      // Auto-register webhook on startup
+      // Auto-register webhook or fallback to long polling on startup
       try {
-        console.log("[Auto-Webhook] Verification of Telegram Bot Webhook started on port listen...");
+        console.log("[Auto-Webhook] Verification of Telegram Bot Pipeline started...");
         const { botToken, channelId, webhookUrl } = await getOrSeedTelegramConfig();
         if (botToken && channelId) {
-          console.log(`[Auto-Webhook] Found bot configurations. Automatically setting webhook to: ${webhookUrl}`);
-          const result = await callTelegram(botToken, "setWebhook", { url: webhookUrl });
-          console.log("[Auto-Webhook] Telegram setWebhook response:", result);
-          if (result.ok) {
-            console.log("[Auto-Webhook] Registered successfully!");
+          const isDev = process.env.NODE_ENV !== "production";
+          if (isDev) {
+            console.log("[Auto-Webhook] Detected DEVELOPMENT environment. Starting Long Polling Fallback...");
+            const delRes = await callTelegram(botToken, "deleteWebhook", {});
+            console.log("[Auto-Webhook] Telegram deleteWebhook response:", delRes);
+            startPolling(botToken);
           } else {
-            console.error("[Auto-Webhook] Registration failed:", result.description);
+            console.log(`[Auto-Webhook] Detected PRODUCTION environment. Registering Webhook to: ${webhookUrl}`);
+            const result = await callTelegram(botToken, "setWebhook", { url: webhookUrl });
+            console.log("[Auto-Webhook] Telegram setWebhook response:", result);
+            if (result.ok) {
+              console.log("[Auto-Webhook] Webhook registered successfully!");
+            } else {
+              console.error("[Auto-Webhook] Webhook registration failed:", result.description);
+              console.log("[Auto-Webhook] Falling back to Long Polling...");
+              await callTelegram(botToken, "deleteWebhook", {});
+              startPolling(botToken);
+            }
           }
         }
       } catch (e: any) {
-        console.error("[Auto-Webhook] Critical exception:", e.message);
+        console.error("[Auto-Webhook] Critical exception during startup:", e.message);
       }
     });
   }
