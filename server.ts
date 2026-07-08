@@ -174,14 +174,188 @@ async function processTelegramUpdate(update: any): Promise<void> {
   // Load config dynamically with fallback auto-seeding
   const { botToken, channelId } = await getOrSeedTelegramConfig();
 
+  const text = (message.text || "").trim();
+  const isLectureCmd = text.toLowerCase().startsWith("/lecture");
+
+  if (isLectureCmd) {
+    if (!botToken) {
+      console.error("Bot token is blank.");
+      return;
+    }
+
+    let branch = "";
+    let semester = 0;
+    let subject = "";
+    let chapter = "";
+    let title = "";
+    let videoUrl = "";
+
+    // 1. First, check multi-line format
+    const lines = text.split("\n");
+    if (lines.length >= 4) {
+      for (const line of lines) {
+        const lowerLine = line.toLowerCase().trim();
+        if (lowerLine.startsWith("branch:") || lowerLine.startsWith("branch -") || lowerLine.startsWith("branch =")) {
+          branch = line.substring(line.indexOf(":") + 1 || line.indexOf("-") + 1 || line.indexOf("=") + 1).trim();
+        } else if (lowerLine.startsWith("sem:") || lowerLine.startsWith("semester:") || lowerLine.startsWith("sem -") || lowerLine.startsWith("sem =") || lowerLine.startsWith("semester =")) {
+          const semStr = line.substring(line.indexOf(":") + 1 || line.indexOf("-") + 1 || line.indexOf("=") + 1).trim();
+          const m = semStr.match(/\b([1-8])\b/);
+          if (m) semester = parseInt(m[1]);
+        } else if (lowerLine.startsWith("subject:") || lowerLine.startsWith("course:") || lowerLine.startsWith("subject -") || lowerLine.startsWith("subject =")) {
+          subject = line.substring(line.indexOf(":") + 1 || line.indexOf("-") + 1 || line.indexOf("=") + 1).trim();
+        } else if (lowerLine.startsWith("chapter:") || lowerLine.startsWith("unit:") || lowerLine.startsWith("chapter -") || lowerLine.startsWith("chapter =")) {
+          chapter = line.substring(line.indexOf(":") + 1 || line.indexOf("-") + 1 || line.indexOf("=") + 1).trim();
+        } else if (lowerLine.startsWith("lecture:") || lowerLine.startsWith("title:") || lowerLine.startsWith("lecture name:") || lowerLine.startsWith("lecture -") || lowerLine.startsWith("lecture =") || lowerLine.startsWith("lesson:")) {
+          title = line.substring(line.indexOf(":") + 1 || line.indexOf("-") + 1 || line.indexOf("=") + 1).trim();
+        } else if (lowerLine.startsWith("url:") || lowerLine.startsWith("link:") || lowerLine.startsWith("youtube:") || lowerLine.startsWith("video:") || lowerLine.startsWith("url =") || lowerLine.startsWith("link =")) {
+          videoUrl = line.substring(line.indexOf(":") + 1 || line.indexOf("-") + 1 || line.indexOf("=") + 1).trim();
+        }
+      }
+    }
+
+    // 2. If fields are not fully extracted, check single-line delimited with pipe '|'
+    if (!branch || !semester || !subject || !chapter || !title || !videoUrl) {
+      const rawContent = text.substring(8).trim(); // Skip "/lecture"
+      const parts = rawContent.split("|");
+      if (parts.length >= 6) {
+        branch = parts[0].trim();
+        const semM = parts[1].trim().match(/\b([1-8])\b/);
+        if (semM) semester = parseInt(semM[1]);
+        subject = parts[2].trim();
+        chapter = parts[3].trim();
+        title = parts[4].trim();
+        videoUrl = parts[5].trim();
+      }
+    }
+
+    // 3. If still not fully extracted, check single-line delimited with hyphen '-'
+    if (!branch || !semester || !subject || !chapter || !title || !videoUrl) {
+      const rawContent = text.substring(8).trim(); // Skip "/lecture"
+      const parts = rawContent.split("-");
+      if (parts.length >= 6) {
+        branch = parts[0].trim();
+        const semM = parts[1].trim().match(/\b([1-8])\b/);
+        if (semM) semester = parseInt(semM[1]);
+        subject = parts[2].trim();
+        chapter = parts[3].trim();
+        title = parts[4].trim();
+        videoUrl = parts[5].trim();
+      }
+    }
+
+    // Extract videoId from videoUrl
+    let videoId = videoUrl.trim();
+    if (videoId.includes("youtube.com") || videoId.includes("youtu.be")) {
+      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+      const match = videoId.match(regExp);
+      if (match && match[2].length === 11) {
+        videoId = match[2];
+      }
+    }
+
+    // Clean branch
+    const upperBranch = branch.toUpperCase().trim();
+    const branchMatches = upperBranch.match(/\b(CSE|ECE|ME|CE|EE|IT|CS)\b/);
+    if (branchMatches) {
+      branch = branchMatches[0] === "CS" ? "CSE" : branchMatches[0];
+    } else {
+      branch = ""; // invalidate to trigger helper
+    }
+
+    const uploaderName = [message.from?.first_name, message.from?.last_name].filter(Boolean).join(" ") || "Student Contributor";
+
+    // Validate we have all required fields
+    if (branch && semester >= 1 && semester <= 8 && subject.trim() && chapter.trim() && title.trim() && videoId.length === 11) {
+      try {
+        const payload = {
+          branch,
+          semester,
+          subject: subject.trim(),
+          chapter: chapter.trim(),
+          title: title.trim(),
+          videoId,
+          order: 1,
+          description: `Uploaded via Telegram Bot by ${uploaderName}`,
+          secretCode: "apnaBEU@admin2026",
+          createdAt: new Date().toISOString()
+        };
+
+        await addDoc(collection(serverDb, "lectures"), payload);
+
+        const uploaderUser = message.from?.username ? `@${message.from.username}` : uploaderName;
+        const successResponse = `🎉 <b>Lecture Uploaded Successfully!</b> 🚀\n\n` +
+          `Your video lecture has been added to our portal directory instantly!\n\n` +
+          `📚 <b>Details:</b>\n` +
+          `• <b>Branch:</b> ${branch}\n` +
+          `• <b>Semester:</b> ${semester}rd/th Sem\n` +
+          `• <b>Subject:</b> ${subject.trim()}\n` +
+          `• <b>Chapter:</b> ${chapter.trim()}\n` +
+          `• <b>Lesson:</b> ${title.trim()}\n` +
+          `• <b>YouTube Watch ID:</b> <code>${videoId}</code>\n` +
+          `• <b>Contributor:</b> ${uploaderUser}\n\n` +
+          `Thank you for contributing to your peers! Watch it live on the website! 🌟`;
+
+        await callTelegram(botToken, "sendMessage", {
+          chat_id: chatId,
+          text: successResponse,
+          parse_mode: "HTML"
+        });
+      } catch (err: any) {
+        console.error("Error writing telegram lecture to database:", err);
+        await callTelegram(botToken, "sendMessage", {
+          chat_id: chatId,
+          text: `❌ <b>Database Error:</b> Failed to register lecture. Please try again later.`,
+          parse_mode: "HTML"
+        });
+      }
+    } else {
+      // Send helpful formatting instructions
+      const helpText = `🎥 <b>How to Upload/Add Video Lectures via Bot:</b>\n\n` +
+        `You can instantly add curated YouTube lectures to our website directory! Please send the details using one of these two easy formats:\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `📋 <b>OPTION A: Multi-line Format (Recommended)</b>\n` +
+        `<i>Copy, paste, edit the fields, and send to the bot:</i>\n\n` +
+        `<code>/lecture\n` +
+        `Branch: CSE\n` +
+        `Sem: 3rd\n` +
+        `Subject: Data Structures\n` +
+        `Chapter: Chapter 1: Introduction\n` +
+        `Lecture: Big O Notation and Complexity\n` +
+        `URL: https://www.youtube.com/watch?v=V39Z-VepnBY</code>\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `📋 <b>OPTION B: Single-line Format</b>\n` +
+        `<i>Send a single message using "|" (pipes) to separate details:</i>\n\n` +
+        `<code>/lecture CSE | 3rd Sem | Data Structures | Chapter 1 | Big O Notation | https://www.youtube.com/watch?v=V39Z-VepnBY</code>\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `💡 <b>IMPORTANT RULES:</b>\n` +
+        `• <b>Branch</b> must be one of: CSE, ECE, ME, CE, EE, IT\n` +
+        `• <b>Sem</b> must be from 1st to 8th\n` +
+        `• A valid YouTube link is required so students can watch it directly on our portal!\n\n` +
+        `Your input had:\n` +
+        `• Branch: ${branch || "❌ missing or invalid"}\n` +
+        `• Sem: ${semester || "❌ missing or invalid"}\n` +
+        `• Subject: ${subject.trim() || "❌ missing"}\n` +
+        `• Chapter: ${chapter.trim() || "❌ missing"}\n` +
+        `• Title: ${title.trim() || "❌ missing"}\n` +
+        `• Video Link: ${videoId ? "✅ valid" : "❌ missing or invalid link"}`;
+
+      await callTelegram(botToken, "sendMessage", {
+        chat_id: chatId,
+        text: helpText,
+        parse_mode: "HTML"
+      });
+    }
+    return;
+  }
+
   if (!document && !photo) {
     const isStart = message.text && message.text.startsWith("/start");
     
-    const welcomeText = `👋 <b>Welcome to the NexusBEU Student Materials Bot!</b> 🚀\n\nI will help you instantly upload and list your study materials (such as hand-written notes, syllabus, reference books, past year papers (PYQs), or college sheets) on our website directory!\n\n--------------------------------------------\n\n📥 <b>HOW TO UPLOAD MATERIALS THE RIGHT WAY:</b>\n\n1️⃣ <b>Attach your file:</b>\n   • Send any document (PDF, DOCX, ZIP) or a high-quality photo/image directly to me.\n   \n2️⃣ <b>Include details in the CAPTION (CRITICAL):</b>\n   • You must specify the <b>Branch</b> (e.g., CSE, ECE, ME, CE, EE, IT) and <b>Semester</b> (1st to 8th) in the caption text of the file before hitting send.\n   • Add the subject name and details so other students can find it easily!\n\n--------------------------------------------\n\n📝 <b>CAPTION FORMAT EXAMPLES:</b>\n\n✅ <i>"CSE 5th Sem - Compiler Design unit 3 notes by Neha"</i>\n✅ <i>"ECE 3rd Semester - Network Theory PYQs 2024"</i>\n✅ <i>"ME 4th Sem - Fluid Mechanics handbook"</i>\n\n--------------------------------------------\n\n💡 <b>WHAT HAPPENS NEXT?</b>\n• Once you send the file, our bot automatically extracts the branch and semester from your caption.\n• The file is safely logged in our official repository and published instantly on our website under <b>"Bot Uploads"</b> for everyone to download!\n\nLet's keep the peer contribution growing! Thank you for supporting your fellow students! 🌟`;
+    const welcomeText = `👋 <b>Welcome to the NexusBEU Student Materials Bot!</b> 🚀\n\nI will help you instantly upload and list your study materials (such as hand-written notes, syllabus, reference books, past year papers (PYQs), or college sheets) on our website directory!\n\n--------------------------------------------\n\n📥 <b>HOW TO UPLOAD MATERIALS THE RIGHT WAY:</b>\n\n1️⃣ <b>Attach your file:</b>\n   • Send any document (PDF, DOCX, ZIP) or a high-quality photo/image directly to me.\n   \n2️⃣ <b>Include details in the CAPTION (CRITICAL):</b>\n   • You must specify the <b>Branch</b> (e.g., CSE, ECE, ME, CE, EE, IT) and <b>Semester</b> (1st to 8th) in the caption text of the file before hitting send.\n   • Add the subject name and details so other students can find it easily!\n\n--------------------------------------------\n\n📝 <b>CAPTION FORMAT EXAMPLES:</b>\n\n✅ <i>"CSE 5th Sem - Compiler Design unit 3 notes by Neha"</i>\n✅ <i>"ECE 3rd Semester - Network Theory PYQs 2024"</i>\n✅ <i>"ME 4th Sem - Fluid Mechanics handbook"</i>\n\n--------------------------------------------\n\n🎥 <b>NEW: UPLOAD VIDEO LECTURES:</b>\n• You can also add curated YouTube lectures via the bot! Just send the keyword <b>/lecture</b> to get step-by-step instructions and templates.\n\n--------------------------------------------\n\n💡 <b>WHAT HAPPENS NEXT?</b>\n• Once you send the file or lecture, our bot automatically extracts details and publishes it instantly on our website!\n\nLet's keep the peer contribution growing! Thank you for supporting your fellow students! 🌟`;
     
     const responseText = isStart 
       ? welcomeText 
-      : `ℹ️ <b>To upload study materials to NexusBEU correctly:</b>\n\n1️⃣ Attach a document (PDF, DOCX, ZIP) or an image/photo.\n2️⃣ In the caption, specify the <b>Branch</b> (e.g., CSE, ECE, ME), <b>Semester</b> (e.g., 3rd Sem), and <b>Subject</b>.\n\n📝 <b>Example caption:</b>\n<i>"CSE 3rd Sem - Data Structures Notes by Rahul"</i>`;
+      : `ℹ️ <b>To upload study materials or lectures to NexusBEU correctly:</b>\n\n📁 <b>For study materials:</b>\n1️⃣ Attach a document (PDF, DOCX, ZIP) or an image.\n2️⃣ In the caption, specify the <b>Branch</b>, <b>Semester</b>, and <b>Subject</b>.\n\n🎥 <b>For video lectures:</b>\nSend <code>/lecture</code> to receive easy upload templates and examples.`;
     
     if (botToken) {
       const sendRes = await callTelegram(botToken, "sendMessage", { 
@@ -219,8 +393,8 @@ async function processTelegramUpdate(update: any): Promise<void> {
     mimeType = "image/jpeg";
   }
 
-  let branch = "CSE";
-  let semester = 3;
+  let branch = "";
+  let semester = 0;
 
   const upperCaption = caption.toUpperCase();
   const branchMatches = upperCaption.match(/\b(CSE|ECE|ME|CE|EE|IT|CS)\b/);
@@ -231,6 +405,65 @@ async function processTelegramUpdate(update: any): Promise<void> {
   const semMatches = upperCaption.match(/\b([1-8])(?:ST|ND|RD|TH)?\s*(?:SEM|SEMESTER)?\b/i);
   if (semMatches) {
     semester = parseInt(semMatches[1]);
+  }
+
+  const errors: string[] = [];
+
+  // Check if caption is completely empty
+  if (!caption.trim()) {
+    errors.push("<b>No Caption Provided:</b> You sent a file without any caption description. The bot needs a caption specifying your <b>Branch</b> and <b>Semester</b> to organize the resource.");
+  } else {
+    // If we have a caption, check if branch and semester were found
+    if (!branch) {
+      errors.push("<b>Branch Missing or Invalid:</b> We couldn't detect your Branch (must be CSE, ECE, ME, CE, EE, or IT) in the caption message. Please include a clear branch tag.");
+    }
+    if (!semester) {
+      errors.push("<b>Semester Missing or Invalid:</b> We couldn't detect your Semester (must be from 1st Sem to 8th Sem) in the caption message. Please include a clear semester tag.");
+    }
+  }
+
+  // Check if the filename is generic / wrong method
+  const lowerName = fileName.toLowerCase();
+  const genericKeywords = [
+    "untitled", "document", "screenshot", "scan_", "camscanner", "vflat", 
+    "adobescan", "image_", "photo_", "img_", "whatsapp image", "telegram", "unnamed"
+  ];
+  const isGeneric = genericKeywords.some(kw => lowerName.includes(kw));
+  // also check if base name is purely numbers (e.g. unix timestamp or date sequence)
+  const baseName = fileName.includes(".") ? fileName.substring(0, fileName.lastIndexOf(".")) : fileName;
+  const isNumericOnly = /^\d+$/.test(baseName) || /^[0-9_\-]+$/.test(baseName);
+
+  if (isGeneric || isNumericOnly) {
+    errors.push(`<b>Improper File Name ("${escapeHtml(fileName)}"):</b> Your file name is using a generic, default scanner or screenshot name. Please rename your file to describe the course and subject using our standard CamelCase formula before sending!`);
+  }
+
+  // If there are validation errors, reject and send detailed instruction
+  if (errors.length > 0) {
+    const rejectText = `❌ <b>Resource Upload Rejected!</b> ⚠️\n\n` +
+      `We couldn't accept your contribution <b>"${escapeHtml(fileName)}"</b> because it was sent in an incorrect or incomplete format.\n\n` +
+      `🔍 <b>Identified Issues:</b>\n` +
+      errors.map((err, idx) => `${idx + 1}. ${err}`).join("\n\n") + `\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `📂 <b>HOW TO UPLOAD PROPERLY (3 simple rules):</b>\n\n` +
+      `1️⃣ <b>Rename your file (CRITICAL):</b>\n` +
+      `Before uploading, rename your PDF file using our standard CamelCase format:\n` +
+      `<code>[Branch]_[Sem]_[Subject]_[Topic]_[Uploader].pdf</code>\n` +
+      `• <i>Good Name: <b>CSE_5thSem_CompilerDesign_Notes_Neha.pdf</b></i>\n` +
+      `• <i>Avoid names like "Document.pdf", "CamScanner_Scan.pdf", "Screenshot.png", or simple numbers!</i>\n\n` +
+      `2️⃣ <b>Include a descriptive CAPTION:</b>\n` +
+      `Type a caption with your file before clicking send. It MUST mention your <b>Branch</b> and <b>Semester</b>.\n` +
+      `• <i>Good Caption: <b>"CSE 5th Sem - Compiler Design unit 3 notes by Neha"</b></i>\n\n` +
+      `3️⃣ <b>Ensure clear, high-quality material:</b>\n` +
+      `Make sure sheets are clearly scanned and cropped using applications like Adobe Scan, Microsoft Lens, or vFlat.\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `👉 <b>Please rename your file, write a proper caption, and resubmit it to the bot! Thank you for supporting your peers!</b> 🌟`;
+
+    await callTelegram(botToken, "sendMessage", {
+      chat_id: chatId,
+      text: rejectText,
+      parse_mode: "HTML"
+    });
+    return;
   }
 
   const uploaderName = [message.from?.first_name, message.from?.last_name].filter(Boolean).join(" ") || "Student Contributor";
@@ -316,6 +549,7 @@ async function startPolling(token: string) {
 
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 async function startServer() {
   const PORT = 3000;
@@ -754,26 +988,45 @@ async function startServer() {
     const queryString = queryParams.toString();
     const targetUrl = `https://beu-bih.ac.in${targetPath}${queryString ? "?" + queryString : ""}`;
 
-    // Clean up request headers before forwarding
+    // Clean up request headers before forwarding - use a minimal safe set to prevent remote crashes (e.g. cookie parsing, or cloud WAF block)
     const headers: Record<string, string> = {};
+    const allowedHeaders = [
+      "accept", "accept-language", "content-type", "content-length", "user-agent",
+      "sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-platform", "sec-fetch-dest", "sec-fetch-mode", "sec-fetch-site"
+    ];
     
-    // Copy headers cleanly
-    Object.keys(req.headers).forEach((key) => {
+    allowedHeaders.forEach((key) => {
       if (req.headers[key] !== undefined) {
-        headers[key.toLowerCase()] = String(req.headers[key]);
+        headers[key] = String(req.headers[key]);
       }
     });
 
-    delete headers["host"];
-    delete headers["connection"];
-    
     // Set referer and origin to point to the university itself so WAF/CSRF protection doesn't block us
     headers["referer"] = "https://beu-bih.ac.in/result-one";
     headers["origin"] = "https://beu-bih.ac.in";
+    headers["host"] = "beu-bih.ac.in";
     
     // Request plain uncompressed content so we can parse and rewrite URLs
     headers["accept-encoding"] = "identity";
     headers["user-agent"] = userAgent;
+
+    // Handle POST body serialization and length calculation BEFORE sending request
+    let bodyData: string | Buffer | null = null;
+    const reqContentType = req.headers["content-type"] || "";
+    const method = req.method.toUpperCase();
+    
+    if (method !== "GET" && method !== "HEAD" && method !== "DELETE") {
+      if (req.body && Object.keys(req.body).length > 0) {
+        if (reqContentType.includes("application/x-www-form-urlencoded")) {
+          bodyData = new URLSearchParams(req.body as any).toString();
+        } else if (reqContentType.includes("application/json")) {
+          bodyData = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
+        } else {
+          bodyData = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
+        }
+        headers["content-length"] = Buffer.byteLength(bodyData).toString();
+      }
+    }
 
     const options = {
       method: req.method,
@@ -812,6 +1065,14 @@ async function startServer() {
           return;
         }
 
+        const contentType = resTarget.headers["content-type"] || "";
+        const lowerContentType = contentType.toLowerCase();
+        const isHtml = lowerContentType.includes("text/html");
+        const isJs = lowerContentType.includes("javascript") || lowerContentType.includes("application/x-javascript");
+        const isCss = lowerContentType.includes("text/css");
+        const isJson = lowerContentType.includes("application/json");
+        const isRewriteType = isHtml || isJs || isCss || isJson;
+
         // Set response headers, skipping original safety restrictors to permit embedding in iframe
         Object.keys(resTarget.headers).forEach((key) => {
           const lowerKey = key.toLowerCase();
@@ -820,7 +1081,8 @@ async function startServer() {
             lowerKey !== "content-security-policy" &&
             lowerKey !== "content-security-policy-report-only" &&
             lowerKey !== "cross-origin-resource-policy" &&
-            lowerKey !== "cross-origin-embedder-policy"
+            lowerKey !== "cross-origin-embedder-policy" &&
+            !(lowerKey === "content-length" && isRewriteType) // Don't copy Content-Length if we are rewriting
           ) {
             res.setHeader(key, resTarget.headers[key]!);
           }
@@ -830,20 +1092,16 @@ async function startServer() {
         res.setHeader("X-Frame-Options", "ALLOWALL");
         res.setHeader("Content-Security-Policy", "frame-ancestors *");
 
-        const contentType = resTarget.headers["content-type"] || "";
-        const lowerContentType = contentType.toLowerCase();
-        const isHtml = lowerContentType.includes("text/html");
-        const isJs = lowerContentType.includes("javascript") || lowerContentType.includes("application/x-javascript");
-        const isCss = lowerContentType.includes("text/css");
-        const isJson = lowerContentType.includes("application/json");
-
-        if (isHtml || isJs || isCss || isJson) {
+        if (isRewriteType) {
           let data = "";
           resTarget.on("data", (chunk) => {
             data += chunk;
           });
           resTarget.on("end", () => {
             let bodyStr = data;
+
+            // Remove content-length header so Express can recalculate it correctly
+            res.removeHeader("content-length");
 
             // 1. HTML Specific Rewriting
             if (isHtml) {
@@ -886,8 +1144,8 @@ async function startServer() {
 
             // 2. Global API Endpoints and hardcoded URL Rewriting (CORS bypass)
             // Replace absolute BEU URLs with relative paths pointing back to our proxy
-            bodyStr = bodyStr.replace(/https:\/\/beu-bih\.ac\.in\//gi, "/api/beu-proxy/");
-            bodyStr = bodyStr.replace(/https:\/\/beu-bih\.ac\.in/gi, "/api/beu-proxy");
+            bodyStr = bodyStr.replace(/https?:\/\/beu-bih\.ac\.in\//gi, "/api/beu-proxy/");
+            bodyStr = bodyStr.replace(/https?:\/\/beu-bih\.ac\.in/gi, "/api/beu-proxy");
 
             // 3. Javascript Specific Frame-Busting / Iframe Sandbox Bypass
             if (isJs) {
@@ -915,19 +1173,14 @@ async function startServer() {
         res.status(504).send("Proxy timeout");
       });
 
-      // Stream requests body correctly for GET/POST methods
-      const method = req.method.toUpperCase();
-      if (method === "GET" || method === "HEAD" || method === "DELETE") {
+      // Write request body if present, else finish the request
+      if (bodyData !== null) {
+        clientRequest.write(bodyData);
         clientRequest.end();
+      } else if (method !== "GET" && method !== "HEAD" && method !== "DELETE") {
+        req.pipe(clientRequest);
       } else {
-        // If a body parser already parsed it, we need to write it out
-        if (req.body && Object.keys(req.body).length > 0) {
-          const bodyData = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
-          clientRequest.write(bodyData);
-          clientRequest.end();
-        } else {
-          req.pipe(clientRequest);
-        }
+        clientRequest.end();
       }
 
     } catch (error) {

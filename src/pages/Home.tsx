@@ -102,7 +102,7 @@ export default function Home({ setPage }: HomeProps) {
   return (
     <div id="home-page" className="bg-slate-50 dark:bg-slate-950 min-h-screen transition-colors duration-200">
       {/* Hero Section */}
-      <div className="relative overflow-hidden bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 py-16 sm:py-24 transition-colors duration-200">
+      <div className="hidden lg:block relative overflow-hidden bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 py-16 sm:py-24 transition-colors duration-200">
         <div className="absolute inset-0 bg-[radial-gradient(#2563eb_1px,transparent_1px)] [background-size:16px_16px] opacity-8 dark:opacity-4"></div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
           <div className="text-center">
@@ -139,10 +139,11 @@ export default function Home({ setPage }: HomeProps) {
       </div>
 
       {/* Main Grid Section */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-            Academic Portals & Utilities
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-16 lg:py-16">
+        <div className="text-center max-w-3xl mx-auto mb-8 lg:mb-16">
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+            <span className="lg:hidden">Academic Tools</span>
+            <span className="hidden lg:inline">Academic Portals & Utilities</span>
           </h2>
           <p className="mt-4 text-slate-500 dark:text-slate-400 font-medium">
             Select a hub below to jump directly into your required tools, curated lectures, or study assets.
@@ -393,17 +394,15 @@ export default function Home({ setPage }: HomeProps) {
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Send Resources via Telegram Section */}
+      </div>      {/* Send Resources via Telegram Section */}
       <div id="send-resources-telegram-section" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-16 sm:pb-24">
         <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 rounded-3xl p-8 sm:p-12 shadow-xl shadow-blue-500/10 border border-blue-400/20">
           {/* Subtle decorative background circles */}
           <div className="absolute top-0 right-0 -mr-20 -mt-20 w-80 h-80 rounded-full bg-white/5 blur-3xl"></div>
           <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 rounded-full bg-indigo-500/10 blur-3xl"></div>
 
-          <div className="relative flex flex-col lg:flex-row items-center justify-between gap-8">
-            <div className="max-w-2xl text-center lg:text-left">
+          <div className="relative flex flex-col items-center text-center max-w-3xl mx-auto">
+            <div className="flex flex-col items-center">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-white/10 text-white mb-4 border border-white/15">
                 <Send className="w-3.5 h-3.5 animate-pulse" />
                 Contribute to the Community
@@ -415,7 +414,7 @@ export default function Home({ setPage }: HomeProps) {
                 Help your juniors and classmates excel. Share your hand-written notes, exam papers, syllabus resources, or class materials. Send them directly to our active Telegram channel or bot, and we'll credit you on our platform!
               </p>
               
-              <div className="mt-6 flex flex-wrap justify-center lg:justify-start gap-4 text-xs text-blue-100 font-medium">
+              <div className="mt-6 flex flex-wrap justify-center gap-4 text-xs text-blue-100 font-medium">
                 <span className="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Syllabus Matches
                 </span>
@@ -426,28 +425,28 @@ export default function Home({ setPage }: HomeProps) {
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Contributor Badge & Credit
                 </span>
               </div>
-            </div>
 
-            <div className="flex flex-col sm:flex-row items-center gap-4 shrink-0 w-full lg:w-auto">
-              <a
-                id="join-telegram-btn"
-                href="https://t.me/nexusBEU"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-white hover:bg-slate-50 text-blue-600 font-bold px-8 py-4 rounded-2xl shadow-lg transition-all focus:outline-none cursor-pointer text-center text-sm"
-              >
-                <Send className="w-4 h-4 fill-blue-600 text-blue-600" />
-                Join Telegram Channel
-              </a>
-              <a
-                id="send-telegram-bot-btn"
-                href="https://t.me/nexusbeubot"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-blue-700/40 hover:bg-blue-700/60 text-white font-bold px-8 py-4 rounded-2xl border border-white/20 transition-all focus:outline-none cursor-pointer text-center text-sm"
-              >
-                Send via Bot
-              </a>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 shrink-0 w-full mt-8">
+                <a
+                  id="join-telegram-btn"
+                  href="https://t.me/nexusBEU"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-white hover:bg-slate-50 text-blue-600 font-bold px-8 py-4 rounded-2xl shadow-lg transition-all focus:outline-none cursor-pointer text-center text-sm"
+                >
+                  <Send className="w-4 h-4 fill-blue-600 text-blue-600" />
+                  Join Telegram Channel
+                </a>
+                <a
+                  id="send-telegram-bot-btn"
+                  href="https://t.me/nexusbeubot"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-blue-700/40 hover:bg-blue-700/60 text-white font-bold px-8 py-4 rounded-2xl border border-white/20 transition-all focus:outline-none cursor-pointer text-center text-sm"
+                >
+                  Send via Bot
+                </a>
+              </div>
             </div>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { 
   Home as HomeIcon, 
   FileText, 
@@ -8,7 +8,6 @@ import {
   ArrowLeft, 
   Sun, 
   Moon, 
-  LayoutDashboard, 
   LogIn, 
   BookOpen, 
   Video, 
@@ -17,9 +16,6 @@ import {
   Info, 
   Shield, 
   Phone, 
-  Wifi, 
-  Battery, 
-  Signal,
   Calculator,
   UserCheck,
   Award,
@@ -45,22 +41,6 @@ export default function AndroidMobileShell({
   onToggleDarkMode
 }: AndroidMobileShellProps) {
   const [moreOpen, setMoreOpen] = useState(false);
-  const [currentTime, setCurrentTime] = useState("");
-
-  // Update clock time
-  useEffect(() => {
-    const updateClock = () => {
-      const now = new Date();
-      let hours = now.getHours();
-      const minutes = now.getMinutes().toString().padStart(2, "0");
-      const ampm = hours >= 12 ? "PM" : "AM";
-      hours = hours % 12 || 12;
-      setCurrentTime(`${hours}:${minutes} ${ampm}`);
-    };
-    updateClock();
-    const interval = setInterval(updateClock, 30000); // update every 30s
-    return () => clearInterval(interval);
-  }, []);
 
   // Back button functionality
   const showBackButton = currentPage !== "home";
@@ -149,19 +129,6 @@ export default function AndroidMobileShell({
   return (
     <div id="android-mobile-shell" className="lg:hidden flex flex-col w-full sticky top-0 z-40 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 transition-colors duration-200">
       
-      {/* 1. Android Native-feel Status Bar */}
-      <div className="h-6 px-4 flex items-center justify-between text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-950 select-none border-b border-slate-200/40 dark:border-slate-900/40">
-        <span>{currentTime || "12:00 PM"}</span>
-        <div className="flex items-center gap-1.5">
-          <Signal className="w-3.5 h-3.5" />
-          <Wifi className="w-3.5 h-3.5" />
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] scale-90">84%</span>
-            <Battery className="w-4 h-4 text-emerald-500 fill-emerald-500/20" />
-          </div>
-        </div>
-      </div>
-
       {/* 2. Material Design 3 Top App Bar */}
       <div className="h-14 px-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -223,14 +190,53 @@ export default function AndroidMobileShell({
       {/* 3. Material Design 3 Bottom Navigation Bar */}
       <div className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 py-2 pb-safe shadow-2xl">
         <div className="max-w-md mx-auto flex justify-around items-center px-2">
-          {/* Main 4 tabs */}
-          {primaryTabs.map((tab) => {
-            const Icon = tab.icon;
-            const active = isTabActive(tab.id) && !moreOpen;
+          {[
+            primaryTabs[0], // Home
+            primaryTabs[1], // Notes
+            { id: "more", label: "More", icon: Grid, isMore: true },
+            primaryTabs[2], // PYQs
+            primaryTabs[3]  // Routine
+          ].map((item) => {
+            if ("isMore" in item) {
+              return (
+                <button
+                  key="more"
+                  onClick={() => setMoreOpen(!moreOpen)}
+                  className="flex flex-col items-center justify-center flex-1 py-1.5 relative group cursor-pointer focus:outline-none"
+                >
+                  <div className="relative h-7 flex items-center justify-center mb-1">
+                    <AnimatePresence initial={false}>
+                      {moreOpen && (
+                        <motion.div
+                          layoutId="activeTabPill"
+                          className="absolute inset-0 bg-indigo-100 dark:bg-indigo-950/60 rounded-full -mx-4 z-0"
+                          transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                        />
+                      )}
+                    </AnimatePresence>
+                    <Grid className={`w-5 h-5 relative z-10 transition-colors duration-200 ${
+                      moreOpen 
+                        ? "text-indigo-600 dark:text-indigo-400 scale-105" 
+                        : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                    }`} />
+                  </div>
+                  <span className={`text-[10px] font-bold tracking-tight transition-colors duration-200 ${
+                    moreOpen 
+                      ? "text-indigo-600 dark:text-indigo-400 font-extrabold" 
+                      : "text-slate-500 dark:text-slate-400"
+                  }`}>
+                    More
+                  </span>
+                </button>
+              );
+            }
+
+            const Icon = item.icon;
+            const active = isTabActive(item.id) && !moreOpen;
             return (
               <button
-                key={tab.id}
-                onClick={() => handleNav(tab.id)}
+                key={item.id}
+                onClick={() => handleNav(item.id)}
                 className="flex flex-col items-center justify-center flex-1 py-1.5 relative group cursor-pointer focus:outline-none"
               >
                 {/* Active Pill Background Indicator */}
@@ -255,41 +261,11 @@ export default function AndroidMobileShell({
                     ? "text-blue-600 dark:text-blue-400 font-extrabold" 
                     : "text-slate-500 dark:text-slate-400"
                 }`}>
-                  {tab.label}
+                  {item.label}
                 </span>
               </button>
             );
           })}
-
-          {/* More Sheet Trigger Tab */}
-          <button
-            onClick={() => setMoreOpen(!moreOpen)}
-            className="flex flex-col items-center justify-center flex-1 py-1.5 relative group cursor-pointer focus:outline-none"
-          >
-            <div className="relative h-7 flex items-center justify-center mb-1">
-              <AnimatePresence initial={false}>
-                {moreOpen && (
-                  <motion.div
-                    layoutId="activeTabPill"
-                    className="absolute inset-0 bg-indigo-100 dark:bg-indigo-950/60 rounded-full -mx-4 z-0"
-                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                  />
-                )}
-              </AnimatePresence>
-              <Grid className={`w-5 h-5 relative z-10 transition-colors duration-200 ${
-                moreOpen 
-                  ? "text-indigo-600 dark:text-indigo-400 scale-105" 
-                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
-              }`} />
-            </div>
-            <span className={`text-[10px] font-bold tracking-tight transition-colors duration-200 ${
-              moreOpen 
-                ? "text-indigo-600 dark:text-indigo-400 font-extrabold" 
-                : "text-slate-500 dark:text-slate-400"
-            }`}>
-              More
-            </span>
-          </button>
         </div>
       </div>
 
