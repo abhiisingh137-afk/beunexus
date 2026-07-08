@@ -7,7 +7,18 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="google-site-verification" content="H9zeF2hRAH3xnQUBYTNoTXQ4M0pMo1tCDkZeIxoEzlE" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/website_logo.png" />
     <title>nexusBEU - Student Academic Portal</title>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((reg) => console.log('Service Worker registered successfully with scope:', reg.scope))
+            .catch((err) => console.error('Service Worker registration failed:', err));
+        });
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
