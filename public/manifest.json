@@ -1,21 +1,27 @@
 {
+  "id": "/",
   "short_name": "nexusBEU",
   "name": "nexusBEU Student Academic Portal",
+  "description": "The ultimate student academic portal designed for Bihar Engineering University students, featuring syllabus updates, hand-written notes, and curated lectures.",
+  "lang": "en-US",
+  "dir": "ltr",
+  "categories": ["education", "productivity"],
   "icons": [
-    {
-      "src": "/website_logo.png",
-      "type": "image/png",
-      "sizes": "512x512",
-      "purpose": "any maskable"
-    },
     {
       "src": "/website_logo.png",
       "type": "image/png",
       "sizes": "192x192",
       "purpose": "any"
+    },
+    {
+      "src": "/website_logo.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
     }
   ],
   "start_url": "/",
+  "scope": "/",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
   "display": "standalone",

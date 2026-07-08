@@ -104,7 +104,7 @@ export default function InstallPwaBanner({ forceShow = false, onClose }: Install
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -20 }}
         id="pwa-install-banner"
-        className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4"
+        className="hidden lg:block max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4"
       >
         <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-indigo-700 dark:from-blue-950 dark:via-indigo-950 dark:to-slate-900 rounded-3xl p-5 sm:p-6 text-white shadow-xl border border-blue-200/20 dark:border-slate-800 transition duration-300">
           

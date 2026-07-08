@@ -1,0 +1,10 @@
+{
+  "appId": "com.nexusbeu.app",
+  "appName": "nexusBEU",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "url": "https://your-vercel-domain.com",
+    "cleartext": true
+  }
+}
