@@ -351,9 +351,25 @@ export default function AndroidMobileShell({
                   <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
                     Official Student Portal
                   </h4>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-3">
                     This platform serves Bihar Engineering University students with syllabus updates, hand-written notes, and curated lectures. Send resources via Telegram to collaborate!
                   </p>
+
+                  {/* PWA Guide Reset option */}
+                  <div className="pt-3 border-t border-slate-200/40 dark:border-slate-700/40 flex flex-col gap-1.5">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                      Mobile App Installation
+                    </span>
+                    <button
+                      onClick={() => {
+                        localStorage.removeItem("nexusbeu_pwa_dismissed");
+                        window.location.reload();
+                      }}
+                      className="w-full text-center text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 py-2 px-3 rounded-xl hover:bg-blue-100/50 dark:hover:bg-blue-900/40 transition active:scale-95 cursor-pointer"
+                    >
+                      Show Install Guide & Banner
+                    </button>
+                  </div>
                 </div>
               </div>
             </motion.div>

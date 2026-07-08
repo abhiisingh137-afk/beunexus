@@ -1,5 +1,6 @@
 import React from "react";
 import { BookOpen, FileText, GraduationCap, Video, Bell, Trophy, Calculator, Calendar, ArrowRight, Sparkles, Server, CheckCircle2, Search, Star, Quote, Shield, Zap, Users, ThumbsUp, Send, Award, Bot } from "lucide-react";
+import InstallPwaBanner from "../components/InstallPwaBanner";
 
 interface HomeProps {
   setPage: (page: string) => void;
@@ -137,6 +138,9 @@ export default function Home({ setPage }: HomeProps) {
           </div>
         </div>
       </div>
+
+      {/* PWA Install Banner */}
+      <InstallPwaBanner />
 
       {/* Main Grid Section */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-16 lg:py-16">
